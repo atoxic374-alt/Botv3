@@ -1537,9 +1537,27 @@ const ts = require('./lib/trueStudio');
     };
   }
 
+  function publicProfile(p) {
+    const config = { ...(p?.config || {}) };
+    if (config.proxyUrlEncrypted) {
+      config.proxyUrl = tryDecrypt(config.proxyUrl) || '';
+      delete config.proxyUrlEncrypted;
+    }
+    return { id: p.id, name: p.name, config, updatedAt: p.updatedAt };
+  }
+  function publicSession(last) {
+    if (!last) return null;
+    const session = { ...last, config: last.config ? { ...last.config } : null };
+    if (session.config?.proxyUrlEncrypted) {
+      session.config.proxyUrl = tryDecrypt(session.config.proxyUrl) || '';
+      delete session.config.proxyUrlEncrypted;
+    }
+    return session;
+  }
+
   app.get('/api/ts/profiles', (req, res) => {
     const d = ensureData();
-    ok(res, { profiles: (d.tsProfiles || []).map(p => ({ id: p.id, name: p.name, config: p.config, updatedAt: p.updatedAt })) });
+    ok(res, { profiles: (d.tsProfiles || []).map(publicProfile) });
   });
   app.post('/api/ts/profiles', (req, res) => {
     try {
@@ -1547,13 +1565,15 @@ const ts = require('./lib/trueStudio');
       if (!name) return fail(res, new Error('Profile name is required'));
       const d = ensureData();
       const id = String(req.body?.id || '').trim().slice(0, 80) || ('profile-' + Date.now().toString(36));
-      const record = { id, name, config: profileConfig(req.body?.config || {}), updatedAt: Date.now() };
+      const config = profileConfig(req.body?.config || {});
+      if (config.proxyUrl) { config.proxyUrl = encrypt(config.proxyUrl); config.proxyUrlEncrypted = true; }
+      const record = { id, name, config, updatedAt: Date.now() };
       const index = (d.tsProfiles || []).findIndex(p => p.id === id);
       if (index >= 0) d.tsProfiles[index] = record;
       else d.tsProfiles.unshift(record);
       d.tsProfiles = d.tsProfiles.slice(0, 20);
       writeData(d);
-      ok(res, { profile: record, profiles: d.tsProfiles });
+      ok(res, { profile: publicProfile(record), profiles: d.tsProfiles.map(publicProfile) });
     } catch (e) { fail(res, e); }
   });
   app.delete('/api/ts/profiles/:id', (req, res) => {
@@ -1585,7 +1605,7 @@ const ts = require('./lib/trueStudio');
   app.get('/api/ts/resume', (req, res) => {
     const d = ensureData();
     const last = d.tsLastSession;
-    ok(res, { available: !!(last && last.config && last.state !== 'done'), session: last || null });
+    ok(res, { available: !!(last && last.config && last.state !== 'done'), session: publicSession(last) });
   });
 
   // ── Bot invite helpers ─────────────────────────────────────────────────
@@ -2586,7 +2606,7 @@ const ts = require('./lib/trueStudio');
     s.state = 'running';
     s.pauseRequested = false;
     s.log = [];
-    const sessionConfig = { email: creds.email, rules: r, count: n, prefix: pfx, waitMinutes: wait, proxyUrl: rawProxy, speed, selectedTeamId: selTeamId, brightData: bd ? { enabled: true, customerId: bd.customerId, zoneName: bd.zoneName, protocol: bd.protocol } : null, batchSize: Math.max(1, Math.min(5, parseInt(req.body?.batchSize) || 1)), sessionBudget: Math.max(0, Math.min(500, parseInt(req.body?.sessionBudget) || 0)) };
+    const sessionConfig = { email: creds.email, rules: r, count: n, prefix: pfx, waitMinutes: wait, proxyUrl: rawProxy ? encrypt(rawProxy) : '', proxyUrlEncrypted: !!rawProxy, speed, selectedTeamId: selTeamId, brightData: bd ? { enabled: true, customerId: bd.customerId, zoneName: bd.zoneName, protocol: bd.protocol } : null, batchSize: Math.max(1, Math.min(5, parseInt(req.body?.batchSize) || 1)), sessionBudget: Math.max(0, Math.min(500, parseInt(req.body?.sessionBudget) || 0)) };
     const sessionData = ensureData();
     sessionData.tsLastSession = { state: 'running', config: sessionConfig, done: 0, failed: 0, startedAt: s.startedAt, updatedAt: Date.now() };
     writeData(sessionData);
