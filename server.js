@@ -7,7 +7,7 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { scopedStore, currentUserId, userCtx, SYSTEM_UID } = require('./lib/userScope');
-const { encrypt, tryDecrypt } = require('./lib/crypto');
+const { encrypt, tryDecrypt, isEncrypted } = require('./lib/crypto');
 const { testProxy } = require('./lib/proxy');
 
 const app = express();
@@ -77,6 +77,25 @@ app.use(express.static(path.join(__dirname), {
 
 const botTokensStore = scopedStore('bot_tokens.json', []);
 const dataStore = scopedStore('app_data.json', {});
+
+// Bot tokens are secrets too. Keep the public API returning plaintext for the
+// current UI, but encrypt them at rest and transparently migrate old plaintext
+// records the next time a write occurs.
+function decryptBotTokenRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+  return { ...record, token: tryDecrypt(record.token) || record.token || '' };
+}
+function encryptBotTokenRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+  const token = String(record.token || '');
+  return { ...record, token: token && !isEncrypted(token) ? encrypt(token) : token };
+}
+async function readBotTokens() {
+  return (await botTokensStore.get() || []).map(decryptBotTokenRecord);
+}
+async function writeBotTokens(list) {
+  await botTokensStore.set((Array.isArray(list) ? list : []).map(encryptBotTokenRecord));
+}
 function readData() { return dataStore.read(); }
 function writeData(_d) { dataStore.touch(); }
 function ensureData() {
@@ -117,9 +136,14 @@ const ALLOWED_AVATAR_MIMES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif
 const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 const MAX_BANNER_BYTES = 10 * 1024 * 1024;
 const featureSSE = new Set();
-function sseBroadcast(type, payload) {
+function sseBroadcast(type, payload = {}) {
   const data = JSON.stringify({ type, ...payload });
+  const eventUid = payload?._uid || null;
   for (const s of featureSSE) {
+    // Each browser connection is bound to the user context captured when the
+    // SSE request was opened. Never send another user's session snapshot or
+    // reset-all progress to this connection.
+    if (eventUid && s.uid && s.uid !== eventUid) continue;
     if (!s.types || s.types.includes(type)) {
       try { s.res.write(`data: ${data}\n\n`); } catch (_) {}
     }
@@ -1464,6 +1488,7 @@ const ts = require('./lib/trueStudio');
     try {
       const d = ensureData();
       d.tsAutoIntents = !!req.body?.enabled;
+      writeData(d);
       ok(res, { autoIntents: d.tsAutoIntents });
     } catch (e) { fail(res, e); }
   });
@@ -1990,14 +2015,24 @@ const ts = require('./lib/trueStudio');
     try {
       const { token, client } = await tsGetToken(email);
       const netOpts = { solveCaptcha: buildSolveCaptcha(), client };
-      const teams = await ts.listTeams({ token, netOpts });
-      const mapped = (teams || []).map(t => ({
-        id: t.id,
-        name: t.name,
-        icon: t.icon || null,
-        appCount: (t.apps || []).length,
-        appLimit: 25,
-        isOwner: !!t.isOwner,
+      const [teams, me] = await Promise.all([
+        ts.listTeams({ token, netOpts }),
+        ts.getCurrentUser({ token, netOpts }).catch(() => null),
+      ]);
+      const mapped = await Promise.all((teams || []).map(async t => {
+        let appCount = Array.isArray(t.apps) ? t.apps.length : 0;
+        try {
+          const apps = await ts.listTeamApplications({ token, teamId: t.id, netOpts });
+          if (Array.isArray(apps)) appCount = apps.length;
+        } catch (_) {}
+        return {
+          id: t.id,
+          name: t.name,
+          icon: t.icon || null,
+          appCount,
+          appLimit: 25,
+          isOwner: !!t.isOwner || (!!me?.id && t.owner_user_id === me.id),
+        };
       }));
       ok(res, { teams: mapped });
     } catch (e) { fail(res, e); }
@@ -2036,13 +2071,14 @@ const ts = require('./lib/trueStudio');
     try {
       const acct = tsFindAccount(email);
       if (!acct) throw new Error('Account not found — save it first');
-       const result = await enqueueTsAccount(email, async () => {
-         const { token, client } = await tsGetToken(email);
-         const netOpts = {
-           solveCaptcha: buildSolveCaptcha(), client,
-           totpSecret: creds.totpSecret || undefined,
-           password: creds.password || undefined,
-         };
+      const creds = tsDecryptAccount(acct);
+      const result = await enqueueTsAccount(email, async () => {
+        const { token, client } = await tsGetToken(email);
+        const netOpts = {
+          solveCaptcha: buildSolveCaptcha(), client,
+          totpSecret: creds.totpSecret || undefined,
+          password: creds.password || undefined,
+        };
          // Acquire MFA token if 2FA is enabled
          let mfaToken = null;
          if (creds.totpSecret) {
@@ -2205,13 +2241,13 @@ const ts = require('./lib/trueStudio');
       // even if the client-side save call fails (network blip, page close, etc.)
       try {
         const { name: reqName, icon: reqIcon } = req.body || {};
-        const tkList = await botTokensStore.get() || [];
+        const tkList = await readBotTokens();
         const tkFiltered = tkList.filter(t => t.appId !== appId);
         tkFiltered.unshift({
           appId, name: reqName || appId, icon: reqIcon || null,
           token: newToken, email, resetAt: Date.now(),
         });
-        await botTokensStore.set(tkFiltered);
+        await writeBotTokens(tkFiltered);
       } catch (_) {}
       ok(res, { token: newToken, appId });
     } catch (e) {
@@ -2225,7 +2261,7 @@ const ts = require('./lib/trueStudio');
 
   app.get('/api/ts/bot-tokens', async (req, res) => {
     try {
-      const list = await botTokensStore.get() || [];
+      const list = await readBotTokens();
       ok(res, { tokens: list });
     } catch (e) { fail(res, e); }
   });
@@ -2234,10 +2270,10 @@ const ts = require('./lib/trueStudio');
     try {
       const { appId, name, icon, token, email } = req.body || {};
       if (!appId || !token) return fail(res, new Error('appId and token are required'));
-      const list = await botTokensStore.get() || [];
+      const list = await readBotTokens();
       const filtered = list.filter(t => t.appId !== appId);
       filtered.unshift({ appId, name: name || appId, icon: icon || null, token, email: email || '', resetAt: Date.now() });
-      await botTokensStore.set(filtered);
+      await writeBotTokens(filtered);
       ok(res, { tokens: filtered });
     } catch (e) { fail(res, e); }
   });
@@ -2245,9 +2281,9 @@ const ts = require('./lib/trueStudio');
   app.delete('/api/ts/bot-tokens/:appId', async (req, res) => {
     try {
       const appId = String(req.params.appId || '').trim();
-      const list = await botTokensStore.get() || [];
+      const list = await readBotTokens();
       const filtered = list.filter(t => t.appId !== appId);
-      await botTokensStore.set(filtered);
+      await writeBotTokens(filtered);
       ok(res, { tokens: filtered });
     } catch (e) { fail(res, e); }
   });
@@ -2337,10 +2373,10 @@ const ts = require('./lib/trueStudio');
                 { attempts: 2, minWaitMs: 60_000 }
               );
               if (!newToken) throw new Error('No token returned');
-              const list = await botTokensStore.get() || [];
+              const list = await readBotTokens();
               const filtered = list.filter(t => t.appId !== bot.id);
               filtered.unshift({ appId: bot.id, name: bot.name, icon: bot.icon || null, token: newToken, email, resetAt: Date.now() });
-              await botTokensStore.set(filtered);
+              await writeBotTokens(filtered);
               s.done++;
               pushResetAllEvent('ts_reset_all_progress', { lastBot: { appId: bot.id, name: bot.name, icon: bot.icon || null, token: newToken } });
             } catch (e) {
@@ -2548,6 +2584,16 @@ const ts = require('./lib/trueStudio');
       if (!health.ok) {
         throw new Error('فحص الحساب أوقف التنفيذ: ' + health.message);
       }
+      // Cached/direct-token sessions do not always carry the Discord user id.
+      // Resolve it before team ownership checks; otherwise linkBots can silently
+      // conclude that the user owns no teams and create unlinked applications.
+      if (!userId) {
+        try {
+          const me = await ts.getCurrentUser({ token, netOpts });
+          userId = me?.id || null;
+        } catch (_) {}
+      }
+      s.currentUserId = userId || null;
       tsLog('success', 'فحص الحساب OK — لا يوجد rate-limit/حظر ظاهر قبل البدء');
       if (bd) tsLog('info', 'Bright Data IP rotation: كل بوت ← session ID عشوائي → IP مختلف تلقائياً ✓ (Zone: ' + bd.zoneName + ')');
       else if (proxyList.length > 1) tsLog('info', 'قائمة Proxy: ' + proxyList.length + ' عنوان — سيتغير IP تلقائياً مع كل بوت ✓');
@@ -2716,6 +2762,10 @@ const ts = require('./lib/trueStudio');
             // Commit the switch
             token = _ctx.token; client = _ctx.client; mfaToken = _ctx.mfaToken;
             netOpts = _ctx.netOpts; rateLimiter = _ctx.rateLimiter; currentEmail = _ctx.email;
+            try {
+              const _me = await ts.getCurrentUser({ token, netOpts });
+              s.currentUserId = _me?.id || null;
+            } catch (_) { s.currentUserId = null; }
             s.account = currentEmail;
             botsThisAccount = 0; // reset budget counter on every account switch
             tsLog('success', `✓ تم التبديل إلى: ${currentEmail} — الحساب سليم`);
@@ -2796,7 +2846,15 @@ const ts = require('./lib/trueStudio');
       // ─────────────────────────────────────────────────────────
       let teamId = null;
       let availableTeams = []; // [{id, name, appCount}] for rotation
-      const teamAppCounts  = {}; // teamId → apps added in this session
+      const teamAppCounts  = {}; // teamId → apps currently used by this session/account
+      const loadTeamCounts = async (teams) => Promise.all((teams || []).map(async t => {
+        let appCount = Array.isArray(t.apps) ? t.apps.length : 0;
+        try {
+          const apps = await ts.listTeamApplications({ token, teamId: t.id, netOpts });
+          if (Array.isArray(apps)) appCount = apps.length;
+        } catch (_) {}
+        return { ...t, appCount };
+      }));
 
       if (rules.createTeams) {
         if (s.cancelRequested) return finalizeTs();
@@ -2809,9 +2867,10 @@ const ts = require('./lib/trueStudio');
            const listedTeams = await ts.listTeams({ token, netOpts });
            // Transfer requires ownership; member teams must not be offered as
            // rotation targets because they will fail later and waste a bot.
-           existingTeams = listedTeams.filter(t =>
+           const ownedTeams = listedTeams.filter(t =>
              t && (t.owner_user_id === s.currentUserId || t.isOwner === true)
            );
+           existingTeams = await loadTeamCounts(ownedTeams);
          } catch (_) {}
         await ts.humanDelay(900, 2200, speedFactor);
         tsLog('info', 'إنشاء تيم جديد: ' + teamName);
@@ -2821,7 +2880,8 @@ const ts = require('./lib/trueStudio');
         teamAppCounts[team.id] = 0;
         tsLog('success', 'تم إنشاء التيم #' + team.id);
         // Include existing teams in rotation (after the new one)
-        availableTeams = [{ id: team.id, name: team.name, appCount: 0 }, ...existingTeams.filter(t => t.id !== team.id).map(t => ({ id: t.id, name: t.name, appCount: 0 }))];
+        availableTeams = [{ id: team.id, name: team.name, appCount: 0 }, ...existingTeams.filter(t => t.id !== team.id).map(t => ({ id: t.id, name: t.name, appCount: t.appCount || 0 }))];
+        for (const existing of existingTeams) teamAppCounts[existing.id] = existing.appCount || 0;
         await ts.navigateTo({ client, page: `https://discord.com/developers/teams/${team.id}` });
         await ts.humanDelay(1200, 2800, speedFactor);
         pushTsEvent('ts_progress');
@@ -2834,7 +2894,9 @@ const ts = require('./lib/trueStudio');
            const ownedTeams = teams.filter(t =>
              t && (t.owner_user_id === s.currentUserId || t.isOwner === true)
            );
-           availableTeams = ownedTeams.map(t => ({ id: t.id, name: t.name, appCount: t.apps?.length || 0 }));
+           const countedTeams = await loadTeamCounts(ownedTeams);
+           availableTeams = countedTeams.map(t => ({ id: t.id, name: t.name, appCount: t.appCount || 0 }));
+           for (const team of availableTeams) teamAppCounts[team.id] = team.appCount;
           if (availableTeams.length) {
             // Use selectedTeamId if provided and valid, otherwise pick first
             const preferred = selectedTeamId ? availableTeams.find(t => t.id === selectedTeamId) : null;
@@ -3079,7 +3141,7 @@ const ts = require('./lib/trueStudio');
               const durLabel = durSec ? ` ⚡ ${durSec}s` : '';
               tsLog('success', 'تم: ' + slot.name + ' · token=' + botToken.slice(0, 12) + '…' + durLabel, { durationMs, appId: appPayload.id, botName: slot.name });
               try {
-                const tkList = await botTokensStore.get() || [];
+                const tkList = await readBotTokens();
                 const tkFiltered = tkList.filter(t => t.appId !== appPayload.id);
                 tkFiltered.unshift({
                   appId: appPayload.id, name: slot.name,
@@ -3089,7 +3151,7 @@ const ts = require('./lib/trueStudio');
                   resetAt: Date.now(),
                   createdAt: Date.now(),
                 });
-                await botTokensStore.set(tkFiltered);
+                await writeBotTokens(tkFiltered);
               } catch (_) {}
               pushTsEvent('ts_bot_created', { bot: { name: slot.name, appId: appPayload.id, hasToken: true, durationMs } });
             } else {
@@ -3171,14 +3233,14 @@ const ts = require('./lib/trueStudio');
                   if (rules.linkBots && teamId) teamAppCounts[teamId] = (teamAppCounts[teamId] || 0) + 1;
                   tsLog('success', `تم (${reason}/${currentEmail}): ${slot.name} ⚡ ${(rDurMs/1000).toFixed(1)}s`, { durationMs: rDurMs, appId: rApp.id, botName: slot.name });
                   try {
-                    const tkList = await botTokensStore.get() || [];
+                    const tkList = await readBotTokens();
                     const tkFiltered = tkList.filter(t => t.appId !== rApp.id);
                     tkFiltered.unshift({
                       appId: rApp.id, name: slot.name, icon: rApp.icon || null,
                       token: rTok, email: currentEmail || '',
                       resetAt: Date.now(), createdAt: Date.now(),
                     });
-                    await botTokensStore.set(tkFiltered);
+                    await writeBotTokens(tkFiltered);
                   } catch (_) {}
                   pushTsEvent('ts_bot_created', { bot: { name: slot.name, appId: rApp.id, hasToken: true, durationMs: rDurMs, isRetry: true } });
                   return true;
@@ -3212,14 +3274,14 @@ const ts = require('./lib/trueStudio');
                   if (rules.linkBots && teamId) teamAppCounts[teamId] = (teamAppCounts[teamId] || 0) + 1;
                   tsLog('success', `تم (session-restart): ${slot.name} ⚡ ${(tDurMs/1000).toFixed(1)}s`, { durationMs: tDurMs, appId: tApp.id });
                   try {
-                    const _tkList = await botTokensStore.get() || [];
+                    const _tkList = await readBotTokens();
                     const _tkFiltered = _tkList.filter(t => t.appId !== tApp.id);
                     _tkFiltered.unshift({
                       appId: tApp.id, name: slot.name, icon: tApp.icon || null,
                       token: tTok, email: currentEmail || '',
                       resetAt: Date.now(), createdAt: Date.now(),
                     });
-                    await botTokensStore.set(_tkFiltered);
+                    await writeBotTokens(_tkFiltered);
                   } catch (_) {}
                   pushTsEvent('ts_bot_created', {
                     bot: { name: slot.name, appId: tApp.id, hasToken: true, durationMs: tDurMs, isRetry: true },
@@ -3303,14 +3365,14 @@ const ts = require('./lib/trueStudio');
                     if (rules.linkBots && teamId) teamAppCounts[teamId] = (teamAppCounts[teamId] || 0) + 1;
                     tsLog('success', `تم (retry/${currentEmail}): ${slot.name}`, { durationMs: rDurMs, appId: rApp.id, botName: slot.name });
                     try {
-                      const tkList = await botTokensStore.get() || [];
+                      const tkList = await readBotTokens();
                       const tkFiltered = tkList.filter(t => t.appId !== rApp.id);
                       tkFiltered.unshift({
                         appId: rApp.id, name: slot.name, icon: rApp.icon || null,
                         token: rTok, email: currentEmail || '',
                         resetAt: Date.now(), createdAt: Date.now(),
                       });
-                      await botTokensStore.set(tkFiltered);
+                      await writeBotTokens(tkFiltered);
                     } catch (_) {}
                     pushTsEvent('ts_bot_created', { bot: { name: slot.name, appId: rApp.id, hasToken: true, durationMs: rDurMs, isRetry: true } });
                   } catch (re) {
@@ -3404,7 +3466,7 @@ app.get('/api/features/stream', (req, res) => {
   res.flushHeaders?.();
   res.write(`: connected\n\n`);
   const types = (req.query.types || '').split(',').filter(Boolean);
-  const sc = { res, types: types.length ? types : null };
+  const sc = { res, types: types.length ? types : null, uid: currentUserId() };
 
   if (featureSSE.size >= SSE_FEATURES_MAX) {
     const oldest = featureSSE.values().next().value;

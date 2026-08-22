@@ -2751,7 +2751,10 @@ export class TrueStudioManager {
     });
     // Live-refresh the trigger badge + "Created bots" tab if it's open
     const trig = this.contentArea.querySelector('#ts-lib-trigger');
-    if (trig) trig.innerHTML = this._renderLibraryTrigger(this.snapshot);
+    if (trig) {
+      trig.innerHTML = this._renderLibraryTrigger(this.snapshot);
+      this._bindLibraryTrigger();
+    }
     if (this._libModal && this._libCurrentTab === 'created') this._renderLibraryTab();
   }
 
@@ -3465,6 +3468,15 @@ export class TrueStudioManager {
     `;
   }
 
+  _bindLibraryTrigger() {
+    const trigger = this.contentArea?.querySelector('#ts-lib-trigger');
+    if (!trigger) return;
+    trigger.querySelector('#ts-lib-open')
+      ?.addEventListener('click', () => this._openLibraryModal('teams'));
+    trigger.querySelector('#ts-lib-refresh')
+      ?.addEventListener('click', () => this.loadLibrary());
+  }
+
   _renderLive() {
     const s = this.snapshot;
     if (!s) return;
@@ -3491,14 +3503,7 @@ export class TrueStudioManager {
     const trig = this.contentArea.querySelector('#ts-lib-trigger');
     if (trig) {
       trig.innerHTML = this._renderLibraryTrigger(s);
-      // CRITICAL: rebuilding innerHTML wipes the click handler that _bind()
-      // attached to #ts-lib-open. Without re-attaching here, the library
-      // button stops responding after the very first SSE update — that's the
-      // "hang" the user reported. Same goes for the inline refresh button.
-      trig.querySelector('#ts-lib-open')
-          ?.addEventListener('click', () => this._openLibraryModal('teams'));
-      trig.querySelector('#ts-lib-refresh')
-          ?.addEventListener('click', () => this.loadLibrary());
+      this._bindLibraryTrigger();
     }
     // If the library overlay is open AND the user is on the "created" tab,
     // re-render its body so newly-created bots appear live.
@@ -3937,7 +3942,10 @@ export class TrueStudioManager {
   _patchLibrary() {
     // Trigger button shows the live "loaded apps" badge
     const trig = this.contentArea.querySelector('#ts-lib-trigger');
-    if (trig) trig.innerHTML = this._renderLibraryTrigger(this.snapshot);
+    if (trig) {
+      trig.innerHTML = this._renderLibraryTrigger(this.snapshot);
+      this._bindLibraryTrigger();
+    }
     // If the overlay is open, refresh its body and the refresh-button state
     if (this._libModal) {
       const refreshBtn = this._libModal.querySelector('#ts-lib-refresh-modal');
@@ -4008,6 +4016,10 @@ export class TrueStudioManager {
     const r = this.form.rules;
     if (!r.createTeams && !r.createBots && !r.linkBots) {
       showNotification(t('ts.pick_at_least_one_rule'), 'error');
+      return;
+    }
+    if (r.linkBots && !r.createBots) {
+      showNotification(t('ts.rule_hint_link_needs_bots') || 'فعّل إنشاء البوتات قبل تفعيل ربط البوتات.', 'error');
       return;
     }
     this._sessionStartInFlight = true;
