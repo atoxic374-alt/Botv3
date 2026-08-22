@@ -2318,7 +2318,7 @@
    being distracting. All animations respect prefers-reduced-motion.
    ────────────────────────────────────────────────────────────────────── */
 
-/* 🔑  Pendulum swing — used on key icons in headers / tab labels */
+/* Pendulum swing — used on key icons in headers and tab labels */
 @keyframes tsKeySwing {
   0%        { transform: rotate(-14deg); }
   30%       { transform: rotate(14deg); }
@@ -2327,12 +2327,12 @@
   90%       { transform: rotate(-4deg); }
   100%      { transform: rotate(0deg); }
 }
-/* 🔑  Floating bob — used on the large decorative key in empty states */
+/* Floating bob — used on decorative key icons in empty states */
 @keyframes tsEmojiBob {
   0%, 100%  { transform: translateY(0)    scale(1); }
   50%       { transform: translateY(-7px) scale(1.06); }
 }
-/* Click-pop — plays once on interactive emoji buttons (👁 toggle, copy) */
+/* Click-pop — plays once on interactive icon buttons */
 @keyframes tsEmojiPop {
   0%        { transform: scale(1)    rotate(0deg); }
   30%       { transform: scale(1.45) rotate(-8deg); }
@@ -3409,3 +3409,58 @@
   padding: 6px 18px;
   border-radius: 999px;
 }
+
+
+/* ── Utility controls, profiles and selection ─────────────────────────── */
+.ic { width: 1em; height: 1em; flex: 0 0 auto; vertical-align: -0.14em; }
+.ts-inline-icon { width: 14px; height: 14px; }
+.ts-tab-icon { width: 15px; height: 15px; vertical-align: -0.2em; }
+.ts-utility-card { background: linear-gradient(145deg, rgba(124,224,196,.07), rgba(17,21,31,.96) 55%); }
+.ts-utility-mark { width: 9px; height: 9px; border-radius: 50%; background: var(--ts-mint); box-shadow: 0 0 0 5px var(--ts-mint-soft); }
+.ts-profile-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; align-items: center; }
+.ts-profile-row .ts-select { min-width: 0; }
+.ts-utility-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ts-dry-run-result { display: grid; gap: 6px; margin-top: 12px; padding: 10px; border-radius: 12px; border: 1px solid var(--ts-stroke); background: rgba(0,0,0,.14); }
+.ts-dry-run-result.ok { border-color: rgba(124,224,196,.25); }
+.ts-dry-run-result.warn { border-color: rgba(240,178,50,.3); }
+.ts-check-row { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: center; font-size: 11px; color: var(--ts-muted); }
+.ts-check-row b { color: var(--ts-text); font-size: 12px; }
+.ts-check-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ts-danger); }
+.ts-check-dot.ok { background: var(--ts-mint); box-shadow: 0 0 0 4px var(--ts-mint-soft); }
+.ts-pause-btn { color: var(--ts-warn); border-color: rgba(240,178,50,.3); }
+.ts-pause-btn:hover { background: rgba(240,178,50,.12); }
+.ts-library-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 14px; padding: 10px; border: 1px solid var(--ts-stroke); border-radius: 13px; background: rgba(255,255,255,.025); }
+.ts-library-search { position: relative; flex: 1 1 230px; min-width: 170px; }
+.ts-library-search .ts-input { padding-inline-start: 34px; padding-block: 8px; font-size: 12px; }
+.ts-library-search .ts-drawn-icon { position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%); color: var(--ts-muted); }
+.ts-select-all { display: inline-flex; align-items: center; gap: 6px; color: var(--ts-muted); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.ts-select-all input, .ts-app-select input { accent-color: var(--ts-mint); }
+.ts-selected-count { margin-inline-start: auto; color: var(--ts-mint); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.ts-app-card { position: relative; }
+.ts-app-select { position: absolute; z-index: 3; top: 8px; inset-inline-end: 8px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: rgba(13,17,28,.88); border: 1px solid var(--ts-stroke-2); cursor: pointer; }
+.ts-app-select input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.ts-app-select span { width: 11px; height: 11px; border: 1px solid var(--ts-muted); border-radius: 3px; transition: .15s; }
+.ts-app-select input:checked + span { background: var(--ts-mint); border-color: var(--ts-mint); box-shadow: inset 0 0 0 2px #0d111c; }
+.ts-empty-icon { display: grid; place-items: center; width: 46px; height: 46px; margin: 0 auto 10px; border-radius: 15px; color: var(--ts-mint); background: var(--ts-mint-soft); }
+.ts-empty-icon .ic { width: 25px; height: 25px; }
+.ts-bt-show .ic, .ts-bt-delete .ic { width: 14px; height: 14px; }
+.ts-card-reset-icon { width: 13px; height: 13px; }
+.ts-card-intents-icon { width: 13px; height: 13px; vertical-align: -0.15em; }
+.ts-icon-spin { animation: ts-icon-spin 1s linear infinite; }
+@keyframes ts-icon-spin { to { transform: rotate(360deg); } }
+@media (max-width: 620px) {
+  .ts-profile-row { grid-template-columns: 1fr 1fr; }
+  .ts-profile-row .ts-select { grid-column: 1 / -1; }
+  .ts-account-row { grid-template-columns: 1fr 1fr; }
+  .ts-account-row .ts-select { grid-column: 1 / -1; }
+  .ts-actions { flex-wrap: wrap; }
+  .ts-actions .ts-btn.big { flex: 1 1 30%; min-width: 0; padding-inline: 10px; }
+}
+
+.ts-account-row { grid-template-columns: auto auto auto 1fr; }
+.ts-export-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ts-action-pop { animation: ts-action-pop .24s ease-out; }
+@keyframes ts-action-pop { 0% { transform: scale(1); } 50% { transform: scale(.94); } 100% { transform: scale(1); } }
+.ts-lib-page-body { min-height: 260px; }
+.ts-library-toolbar .ts-input { box-sizing: border-box; }
+@media (max-width: 620px) { .ts-account-row { grid-template-columns: 1fr 1fr; } .ts-export-actions { width: 100%; } }

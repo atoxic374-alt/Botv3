@@ -109,6 +109,8 @@ function ensureData() {
   }
   if (!d.tsCaptcha || typeof d.tsCaptcha !== 'object') { d.tsCaptcha = {}; changed = true; }
   if (typeof d.tsBulkTokenCounter !== 'number') { d.tsBulkTokenCounter = 0; changed = true; }
+  if (!Array.isArray(d.tsProfiles)) { d.tsProfiles = []; changed = true; }
+  if (typeof d.tsLastSession === 'undefined') { d.tsLastSession = null; changed = true; }
   if (changed) dataStore.touch();
   return d;
 }
@@ -198,6 +200,8 @@ const ts = require('./lib/trueStudio');
       ),
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
+      paused: s.pauseRequested === true,
+      resumeAvailable: s.state === 'paused' || (s.state === 'cancelled' && !!ensureData().tsLastSession?.config),
       bots: (s.bots || []).map(b => ({ name: b.name, appId: b.appId, botUserId: b.botUserId, hasToken: !!b.token })),
       lastError: s.lastError,
       log: s.log.slice(-50),
@@ -335,6 +339,22 @@ const ts = require('./lib/trueStudio');
   }
 
   // ── Async sleep that respects cancel flag ──────────────────────
+  async function waitIfPaused() {
+    const s = tsSession();
+    while (s.pauseRequested && !s.cancelRequested) {
+      if (s.state !== 'paused') {
+        s.state = 'paused';
+        pushTsEvent('ts_progress');
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if (!s.cancelRequested && s.state === 'paused') {
+      s.state = 'running';
+      pushTsEvent('ts_progress');
+    }
+    return !s.cancelRequested;
+  }
+
   async function tsSleep(ms) {
     const s = tsSession();
     const prevState = s.state;
@@ -346,6 +366,7 @@ const ts = require('./lib/trueStudio');
     const end = Date.now() + ms;
     while (Date.now() < end) {
       if (s.cancelRequested) break;
+      if (!(await waitIfPaused())) break;
       const left = Math.max(0, end - Date.now());
       await new Promise(r => setTimeout(r, Math.min(tickEvery, left)));
     }
@@ -1296,6 +1317,7 @@ const ts = require('./lib/trueStudio');
       return;
     }
     const email = String(req.body?.email || '').toLowerCase();
+    const selectedIds = new Set(Array.isArray(req.body?.appIds) ? req.body.appIds.map(String) : []);
 
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -1321,8 +1343,8 @@ const ts = require('./lib/trueStudio');
         if (!health.ok) throw new Error('Account blocked: ' + health.message);
 
         const libApps = await ts.listApplications({ token, netOpts });
-        const bots = libApps.filter(a => a && a.bot && a.id);
-        if (!bots.length) throw new Error('لا توجد بوتات في المكتبة');
+        const bots = libApps.filter(a => a && a.bot && a.id && (!selectedIds.size || selectedIds.has(String(a.id))));
+        if (!bots.length) throw new Error(selectedIds.size ? 'لا توجد بوتات محددة قابلة للتنفيذ' : 'لا توجد بوتات في المكتبة');
 
         send({ type: 'start', total: bots.length });
 
@@ -1430,6 +1452,7 @@ const ts = require('./lib/trueStudio');
     try {
       const email = String(req.body?.email || '').toLowerCase();
       const enabled = req.body?.enabled !== false;
+      const selectedIds = new Set(Array.isArray(req.body?.appIds) ? req.body.appIds.map(String) : []);
       if (!email) throw new Error('Email is required');
       const payload = await enqueueTsAccount(email, async () => {
         const { token, client } = await tsGetToken(email);
@@ -1438,7 +1461,7 @@ const ts = require('./lib/trueStudio');
         const health = await ts.accountHealthProbe({ token, netOpts });
         if (!health.ok) throw new Error('Account health check blocked bulk intent update: ' + health.message);
         const libApps = await ts.listApplications({ token, netOpts });
-        const bots = libApps.filter(a => a && a.bot && a.id);
+        const bots = libApps.filter(a => a && a.bot && a.id && (!selectedIds.size || selectedIds.has(String(a.id))));
         const results = [];
         for (let i = 0; i < bots.length; i++) {
           const appObj = bots[i];
@@ -1491,6 +1514,78 @@ const ts = require('./lib/trueStudio');
       writeData(d);
       ok(res, { autoIntents: d.tsAutoIntents });
     } catch (e) { fail(res, e); }
+  });
+
+  function profileConfig(input = {}) {
+    const rules = input.rules || {};
+    return {
+      rules: { createTeams: !!rules.createTeams, createBots: !!rules.createBots, linkBots: !!rules.linkBots },
+      count: Math.max(1, Math.min(50, parseInt(input.count) || 1)),
+      prefix: String(input.prefix || 'Bot').slice(0, 24).trim() || 'Bot',
+      waitMinutes: Math.max(0, Math.min(60, parseInt(input.waitMinutes) || 0)),
+      proxyUrl: typeof input.proxyUrl === 'string' ? input.proxyUrl.slice(0, 20000) : '',
+      speed: ['medium', 'fast', 'veryfast', 'ultra'].includes(input.speed) ? input.speed : 'medium',
+      selectedTeamId: typeof input.selectedTeamId === 'string' ? input.selectedTeamId.slice(0, 64) : '',
+      brightData: input.brightData && typeof input.brightData === 'object' ? {
+        enabled: input.brightData.enabled === true,
+        customerId: String(input.brightData.customerId || '').slice(0, 160),
+        zoneName: String(input.brightData.zoneName || '').slice(0, 160),
+        protocol: input.brightData.protocol === 'socks5h' ? 'socks5h' : 'http',
+      } : { enabled: false },
+      batchSize: Math.max(1, Math.min(5, parseInt(input.batchSize) || 1)),
+      sessionBudget: Math.max(0, Math.min(500, parseInt(input.sessionBudget) || 0)),
+    };
+  }
+
+  app.get('/api/ts/profiles', (req, res) => {
+    const d = ensureData();
+    ok(res, { profiles: (d.tsProfiles || []).map(p => ({ id: p.id, name: p.name, config: p.config, updatedAt: p.updatedAt })) });
+  });
+  app.post('/api/ts/profiles', (req, res) => {
+    try {
+      const name = String(req.body?.name || '').trim().slice(0, 40);
+      if (!name) return fail(res, new Error('Profile name is required'));
+      const d = ensureData();
+      const id = String(req.body?.id || '').trim().slice(0, 80) || ('profile-' + Date.now().toString(36));
+      const record = { id, name, config: profileConfig(req.body?.config || {}), updatedAt: Date.now() };
+      const index = (d.tsProfiles || []).findIndex(p => p.id === id);
+      if (index >= 0) d.tsProfiles[index] = record;
+      else d.tsProfiles.unshift(record);
+      d.tsProfiles = d.tsProfiles.slice(0, 20);
+      writeData(d);
+      ok(res, { profile: record, profiles: d.tsProfiles });
+    } catch (e) { fail(res, e); }
+  });
+  app.delete('/api/ts/profiles/:id', (req, res) => {
+    const d = ensureData();
+    const id = String(req.params.id || '').trim();
+    d.tsProfiles = (d.tsProfiles || []).filter(p => p.id !== id);
+    writeData(d);
+    ok(res, { profiles: d.tsProfiles });
+  });
+
+  app.post('/api/ts/dry-run', (req, res) => {
+    try {
+      const cfg = profileConfig(req.body || {});
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const acct = email ? tsFindAccount(email) : null;
+      const creds = acct ? tsDecryptAccount(acct) : null;
+      const checks = [
+        { key: 'account', label: 'الحساب موجود', ok: !!acct, detail: acct ? 'تم العثور على الحساب' : 'اختر حساباً محفوظاً' },
+        { key: 'credentials', label: 'بيانات الدخول', ok: !!(creds?.password || creds?.directToken), detail: creds ? 'بيانات الاعتماد موجودة' : 'لا يمكن الفحص قبل اختيار الحساب' },
+        { key: 'rules', label: 'قواعد الجلسة', ok: !!(cfg.rules.createTeams || cfg.rules.createBots || cfg.rules.linkBots) && !(cfg.rules.linkBots && !cfg.rules.createBots), detail: cfg.rules.linkBots && !cfg.rules.createBots ? 'الربط يحتاج إنشاء البوتات' : 'القواعد متوافقة' },
+        { key: 'count', label: 'الكمية', ok: !cfg.rules.createBots || cfg.count >= 1, detail: `${cfg.count} بوت كحد أقصى لهذه الجلسة` },
+        { key: 'proxy', label: 'إعداد البروكسي', ok: !cfg.brightData.enabled || !!(cfg.brightData.customerId && cfg.brightData.zoneName), detail: cfg.brightData.enabled ? 'بيانات Bright Data الأساسية موجودة' : 'بدون Bright Data' },
+      ];
+      const passed = checks.every(c => c.ok);
+      ok(res, { ok: passed, checks, plan: { account: email || null, steps: [cfg.rules.createTeams && 'إنشاء أو تجهيز التيم', cfg.rules.createBots && `إنشاء ${cfg.count} بوت`, cfg.rules.linkBots && 'ربط البوتات بالتيم', 'حفظ التوكنات والتقرير'].filter(Boolean) } });
+    } catch (e) { fail(res, e); }
+  });
+
+  app.get('/api/ts/resume', (req, res) => {
+    const d = ensureData();
+    const last = d.tsLastSession;
+    ok(res, { available: !!(last && last.config && last.state !== 'done'), session: last || null });
   });
 
   // ── Bot invite helpers ─────────────────────────────────────────────────
@@ -2401,12 +2496,23 @@ const ts = require('./lib/trueStudio');
     }).catch(() => {});
   });
 
+  app.post('/api/ts/pause', (req, res) => {
+    const s = tsSession();
+    if (!['running', 'waiting', 'paused'].includes(s.state)) return ok(res, { snapshot: tsSnapshot() });
+    s.pauseRequested = !s.pauseRequested;
+    s.state = s.pauseRequested ? 'paused' : 'running';
+    tsLog(s.pauseRequested ? 'warn' : 'info', s.pauseRequested ? 'تم إيقاف الجلسة مؤقتاً' : 'تم استئناف الجلسة');
+    pushTsEvent('ts_progress');
+    ok(res, { snapshot: tsSnapshot() });
+  });
+
   app.post('/api/ts/stop', (req, res) => {
     const s = tsSession();
     if (s.state === 'idle' || s.state === 'done' || s.state === 'cancelled') {
       return ok(res, { snapshot: tsSnapshot() });
     }
     s.cancelRequested = true;
+    s.pauseRequested = false;
     clearPendingTsCaptcha('Session stopped by user');
     s.waitUntilTs = 0;
     s.waitTotalMs = 0;
@@ -2425,7 +2531,7 @@ const ts = require('./lib/trueStudio');
 
   app.post('/api/ts/start', async (req, res) => {
     const s = tsSession();
-    if (s.state === 'running' || s.state === 'waiting') {
+    if (s.state === 'running' || s.state === 'waiting' || s.state === 'paused') {
       return fail(res, new Error('A session is already running'));
     }
     const { email, rules, count, prefix, waitMinutes, proxyUrl, speed, selectedTeamId, brightData } = req.body || {};
@@ -2478,7 +2584,12 @@ const ts = require('./lib/trueStudio');
     s.total = r.createBots ? n : 0;
     s.startedAt = Date.now();
     s.state = 'running';
+    s.pauseRequested = false;
     s.log = [];
+    const sessionConfig = { email: creds.email, rules: r, count: n, prefix: pfx, waitMinutes: wait, proxyUrl: rawProxy, speed, selectedTeamId: selTeamId, brightData: bd ? { enabled: true, customerId: bd.customerId, zoneName: bd.zoneName, protocol: bd.protocol } : null, batchSize: Math.max(1, Math.min(5, parseInt(req.body?.batchSize) || 1)), sessionBudget: Math.max(0, Math.min(500, parseInt(req.body?.sessionBudget) || 0)) };
+    const sessionData = ensureData();
+    sessionData.tsLastSession = { state: 'running', config: sessionConfig, done: 0, failed: 0, startedAt: s.startedAt, updatedAt: Date.now() };
+    writeData(sessionData);
     if (isTsAccountQueued(creds.email)) {
       s.state = 'waiting';
       s.current = 'Queued for account';
@@ -3048,6 +3159,7 @@ const ts = require('./lib/trueStudio');
         let i = 0;
         while (i < count) {
           if (s.cancelRequested) break;
+          if (!(await waitIfPaused())) break;
 
           // Team rotation — evaluated once per batch (sequential, before parallel work)
           if (rules.linkBots && teamId && (teamAppCounts[teamId] || 0) >= 25) {
@@ -3093,6 +3205,9 @@ const ts = require('./lib/trueStudio');
           // Commit the counter advance atomically (before launching parallel work)
           d.tsLastNumber = baseNum + batchSlots.length;
           writeData(d);
+          const savedProgress = ensureData();
+          savedProgress.tsLastSession = { ...(savedProgress.tsLastSession || {}), state: 'running', done: s.done, failed: s.failed, updatedAt: Date.now() };
+          writeData(savedProgress);
 
           const teamIdSnapshot = teamId; // freeze — rotation only happens between batches
 
@@ -3444,6 +3559,9 @@ const ts = require('./lib/trueStudio');
     if (s.cancelRequested) s.state = 'cancelled';
     else if (errored) s.state = 'error';
     else s.state = 'done';
+    const d = ensureData();
+    d.tsLastSession = { ...(d.tsLastSession || {}), state: s.state, done: s.done, failed: s.failed, finishedAt: s.finishedAt, updatedAt: Date.now() };
+    writeData(d);
     tsLog('info', 'انتهت الجلسة — ' + s.done + ' نجاح · ' + s.failed + ' فشل');
     pushTsEvent('ts_done');
   }
@@ -3452,8 +3570,19 @@ const ts = require('./lib/trueStudio');
   app.get('/api/ts/export', (req, res) => {
     const s = tsSession();
     const list = (s.bots || []).slice();
-    const fmt = (req.query.format || 'text');
-    if (fmt === 'json') return ok(res, { bots: list });
+    const fmt = String(req.query.format || 'text').toLowerCase();
+    if (fmt === 'json') {
+      res.set('Content-Type', 'application/json; charset=utf-8');
+      res.set('Content-Disposition', 'attachment; filename="true_studio_report.json"');
+      return res.send(JSON.stringify({ exportedAt: new Date().toISOString(), summary: { state: s.state, total: s.total, done: s.done, failed: s.failed }, config: { account: s.account, rules: s.rules, teamId: s.teamId, teamName: s.teamName }, bots: list }, null, 2));
+    }
+    const csvCell = (value) => '"' + String(value ?? '').replace(/"/g, '""') + '"';
+    if (fmt === 'csv') {
+      const rows = list.map((b, i) => [i + 1, b.name, b.appId, b.botUserId, b.token || '', s.account || ''].map(csvCell).join(','));
+      res.set('Content-Type', 'text/csv; charset=utf-8');
+      res.set('Content-Disposition', 'attachment; filename="true_studio_bots.csv"');
+      return res.send('\ufeffnumber,name,app_id,bot_user_id,token,account\n' + rows.join('\n') + '\n');
+    }
     const lines = list.map((b, i) => String(i + 1).padStart(3, '0') + '\t' + b.name + '\t' + (b.token || ''));
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.set('Content-Disposition', 'attachment; filename="true_studio_tokens.txt"');

@@ -79,6 +79,12 @@ window.electronAPI = {
   tsDeleteAccount: (email) => apiCall('DELETE', `/api/ts/accounts/${encodeURIComponent(email)}`),
   tsState: () => apiCall('GET', '/api/ts/state'),
   tsStart: (cfg) => apiCall('POST', '/api/ts/start', cfg),
+  tsPause: () => apiCall('POST', '/api/ts/pause'),
+  tsResumeInfo: () => apiCall('GET', '/api/ts/resume'),
+  tsDryRun: (cfg) => apiCall('POST', '/api/ts/dry-run', cfg),
+  tsProfiles: () => apiCall('GET', '/api/ts/profiles'),
+  tsSaveProfile: (name, config, id) => apiCall('POST', '/api/ts/profiles', { name, config, id }),
+  tsDeleteProfile: (id) => apiCall('DELETE', `/api/ts/profiles/${encodeURIComponent(id)}`),
   tsStop: () => apiCall('POST', '/api/ts/stop'),
   tsClearLog: () => apiCall('POST', '/api/ts/clear-log'),
   tsTestAccount: (email) => apiCall('POST', '/api/ts/test-account', { email }),
@@ -93,11 +99,11 @@ window.electronAPI = {
     apiCall('GET', `/api/ts/applications/${encodeURIComponent(appId)}/intents?email=${encodeURIComponent(email)}`),
   tsSetIntents: (appId, email, enabled) =>
     apiCall('POST', `/api/ts/applications/${encodeURIComponent(appId)}/intents`, { email, enabled }),
-  tsApplyIntentsAll: (email, enabled = true) =>
-    apiCall('POST', '/api/ts/intents/apply-all', { email, enabled }),
+  tsApplyIntentsAll: (email, enabled = true, appIds = []) =>
+    apiCall('POST', '/api/ts/intents/apply-all', { email, enabled, appIds }),
   tsGetPfp: () => apiCall('GET', '/api/ts/pfp'),
   tsSavePfp: (payload) => apiCall('POST', '/api/ts/pfp', payload),
-  tsApplyPfpAll: (email) => apiCall('POST', '/api/ts/pfp/apply-all', { email: email || '' }),
+  tsApplyPfpAll: (email, appIds = []) => apiCall('POST', '/api/ts/pfp/apply-all', { email: email || '', appIds }),
   tsGetAutoIntents: () => apiCall('GET', '/api/ts/auto-intents'),
   tsSetAutoIntents: (enabled) => apiCall('POST', '/api/ts/auto-intents', { enabled }),
   tsExportUrl: (format = 'text') => `/api/ts/export?format=${encodeURIComponent(format)}`,
