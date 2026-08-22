@@ -1260,9 +1260,9 @@ export class TrueStudioManager {
     // All three off → no valid pipeline
     if (!r.createTeams && !r.createBots && !r.linkBots) return '';
     // linkBots ON but nothing to link (no bots being created, no team to link into)
-    if (r.linkBots && !r.createBots && !r.createTeams) {
+    if (r.linkBots && !r.createBots) {
       return `<div class="ts-rule-hint warn">
-        ⚠ ${escapeHtml(t('ts.rule_hint_link_needs_bots') || 'Link Bots requires Create Bots or Create Teams to be enabled.')}
+        ⚠ ${escapeHtml(t('ts.rule_hint_link_needs_bots') || 'Link Bots requires Create Bots to be enabled.')}
       </div>`;
     }
     // linkBots ON, createBots ON, but no team → bots won't be linked anywhere
@@ -2070,7 +2070,12 @@ export class TrueStudioManager {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: this.selectedEmail, appId, guildId: selectedGuildId, permissions: permsInput?.value || '8' }),
         });
+         if (!resp.ok || !resp.body) {
+           const body = await resp.json().catch(() => ({}));
+           throw new Error(body.error || `HTTP ${resp.status}`);
+         }
         const reader = resp.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+         let terminalEvent = false;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -2081,10 +2086,11 @@ export class TrueStudioManager {
             if (!raw.startsWith('data:')) continue;
             let evt; try { evt = JSON.parse(raw.slice(5)); } catch { continue; }
             if (evt.type === 'step')  addLog('info', evt.msg);
-            else if (evt.type === 'done')  { addLog('ok',   `تم إضافة البوت إلى "${guildName}"`); addBtn.disabled = false; }
-            else if (evt.type === 'error') { addLog('fail', evt.error); addBtn.disabled = false; }
+             else if (evt.type === 'done')  { terminalEvent = true; addLog('ok',   `تم إضافة البوت إلى "${guildName}"`); addBtn.disabled = false; }
+             else if (evt.type === 'error') { terminalEvent = true; addLog('fail', evt.error); addBtn.disabled = false; }
           }
         }
+         if (!terminalEvent) throw new Error('انتهى الاتصال قبل وصول نتيجة إضافة البوت');
       } catch (e) {
         addLog('fail', e.message || String(e));
         addBtn.disabled = false;

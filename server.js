@@ -1338,7 +1338,10 @@ const ts = require('./lib/trueStudio');
             appErr = e.message || String(e);
           }
 
-          const overallOk = botOk;
+           // The operation promises both bot and application visuals. A bot
+           // profile update alone is only a partial success and must be
+           // reported as such so the UI does not claim everything was applied.
+           const overallOk = botOk && appOk;
           if (overallOk) okCount++; else failCount++;
 
           send({
@@ -1578,7 +1581,9 @@ const ts = require('./lib/trueStudio');
                 send({ type: 'retry', index: i + 1, total: appIds.length, appId, attempt: attempt + 1, retryMs });
                 await tsSleep(retryMs);
               } else if (e.status === 403) {
-                succeeded = true; skipped = true; okCount++; skipCount++;
+                // 403 is not proof that the bot is already present. Discord
+                // also uses it for missing guild permissions and policy
+                // rejection, so report it as a real failure.
                 lastErr = e;
                 break;
               } else if (e.code === 'CAPTCHA' || e.code === 'CAPTCHA_REQUIRED' || e.code === 'CAPTCHA_FAILED' || e.captchaSitekey) {
@@ -1715,12 +1720,23 @@ const ts = require('./lib/trueStudio');
       const { token, client } = await tsGetToken(email);
       const netOpts = { solveCaptcha: buildSolveCaptcha(), client };
 
-      // Fetch teams + apps + current user in parallel
-      const [teams, apps, me] = await Promise.all([
-        ts.listTeams({ token, netOpts }).catch(() => []),
-        ts.listApplications({ token, netOpts }).catch(() => []),
-        ts.getCurrentUser({ token, netOpts }).catch(() => null),
+      // Do not turn Discord/API failures into an apparently empty library.
+      // An empty account is valid; an unavailable endpoint is not.
+      const [teamsResult, appsResult, meResult] = await Promise.allSettled([
+        ts.listTeams({ token, netOpts }),
+        ts.listApplications({ token, netOpts }),
+        ts.getCurrentUser({ token, netOpts }),
       ]);
+      const libraryFailure = [teamsResult, appsResult, meResult]
+        .find(r => r.status === 'rejected');
+      if (libraryFailure) {
+        throw libraryFailure.reason instanceof Error
+          ? libraryFailure.reason
+          : new Error(String(libraryFailure.reason || 'Unable to load Discord library'));
+      }
+      const teams = teamsResult.value;
+      const apps = appsResult.value;
+      const me = meResult.value;
 
       const currentUserId = me?.id || null;
 
@@ -1991,21 +2007,23 @@ const ts = require('./lib/trueStudio');
   app.post('/api/ts/teams/create', async (req, res) => {
     const { email, name } = req.body || {};
     if (!email || !name) return fail(res, new Error('email and name are required'));
-    try {
-      const { token, client } = await tsGetToken(email);
-      const netOpts = { solveCaptcha: buildSolveCaptcha(), client };
-      // Ensure dev portal is warmed before creating team (avoids "no teams" after GET /teams)
-      if (!client.devPortalLoaded) {
-        try {
-          await ts.simulateBrowsing({ token, netOpts });
-          await ts.humanDelay(800, 1800);
-          await ts.loadDevPortal({ client, token, netOpts });
-        } catch (_) {}
-      }
-      await ts.navigateTo({ client, page: 'https://discord.com/developers/teams' });
-      await ts.humanDelay(600, 1400);
-      const team = await ts.createTeam({ token, name: String(name).slice(0, 32), netOpts });
-      ok(res, { team: { id: team.id, name: team.name, icon: team.icon || null } });
+       try {
+         const team = await enqueueTsAccount(email, async () => {
+           const { token, client } = await tsGetToken(email);
+           const netOpts = { solveCaptcha: buildSolveCaptcha(), client };
+           // Ensure dev portal is warmed before creating team (avoids "no teams" after GET /teams)
+           if (!client.devPortalLoaded) {
+             try {
+               await ts.simulateBrowsing({ token, netOpts });
+               await ts.humanDelay(800, 1800);
+               await ts.loadDevPortal({ client, token, netOpts });
+             } catch (_) {}
+           }
+           await ts.navigateTo({ client, page: 'https://discord.com/developers/teams' });
+           await ts.humanDelay(600, 1400);
+           return ts.createTeam({ token, name: String(name).trim().slice(0, 32), netOpts });
+         }, { label: 'Create team' });
+         ok(res, { team: { id: team.id, name: team.name, icon: team.icon || null } });
     } catch (e) { fail(res, e); }
   });
 
@@ -2018,21 +2036,22 @@ const ts = require('./lib/trueStudio');
     try {
       const acct = tsFindAccount(email);
       if (!acct) throw new Error('Account not found — save it first');
-      const creds = tsDecryptAccount(acct);
-      const { token, client } = await tsGetToken(email);
-      const netOpts = {
-        solveCaptcha: buildSolveCaptcha(), client,
-        totpSecret: creds.totpSecret || undefined,
-        password: creds.password || undefined,
-      };
-      // Acquire MFA token if 2FA is enabled
-      let mfaToken = null;
-      if (creds.totpSecret) {
-        try { mfaToken = await ts.acquireMfa({ token, totpSecret: creds.totpSecret, netOpts }); }
-        catch (_) {}
-      }
-      const result = await ts.transferAppToTeam({ token, appId, teamId, mfa: mfaToken, netOpts });
-      ok(res, { app: { id: result.id, name: result.name, teamId } });
+       const result = await enqueueTsAccount(email, async () => {
+         const { token, client } = await tsGetToken(email);
+         const netOpts = {
+           solveCaptcha: buildSolveCaptcha(), client,
+           totpSecret: creds.totpSecret || undefined,
+           password: creds.password || undefined,
+         };
+         // Acquire MFA token if 2FA is enabled
+         let mfaToken = null;
+         if (creds.totpSecret) {
+           try { mfaToken = await ts.acquireMfa({ token, totpSecret: creds.totpSecret, netOpts }); }
+           catch (_) {}
+         }
+         return ts.transferAppToTeam({ token, appId, teamId, mfa: mfaToken, netOpts });
+       }, { label: 'Move app to team' });
+       ok(res, { app: { id: result.id, name: result.name, teamId } });
     } catch (e) { fail(res, e); }
   });
 
@@ -2384,6 +2403,9 @@ const ts = require('./lib/trueStudio');
       createBots:  !!(rules && rules.createBots),
       linkBots:    !!(rules && rules.linkBots),
     };
+     if (r.linkBots && !r.createBots) {
+       return fail(res, new Error('Link Bots requires Create Bots in the automation session'));
+     }
     const n = Math.max(1, Math.min(50, parseInt(count) || 1));
     const wait = Math.max(0, Math.min(60, parseInt(waitMinutes) || 0));
     const pfx = String(prefix || 'Bot').slice(0, 24).trim() || 'Bot';
@@ -2782,8 +2804,15 @@ const ts = require('./lib/trueStudio');
         await ts.navigateTo({ client, page: 'https://discord.com/developers/teams' });
         await ts.humanDelay(700, 1800, speedFactor);
         // Fetch existing teams so we can include them in rotation if the new one fills up
-        let existingTeams = [];
-        try { existingTeams = await ts.listTeams({ token, netOpts }); } catch (_) {}
+         let existingTeams = [];
+         try {
+           const listedTeams = await ts.listTeams({ token, netOpts });
+           // Transfer requires ownership; member teams must not be offered as
+           // rotation targets because they will fail later and waste a bot.
+           existingTeams = listedTeams.filter(t =>
+             t && (t.owner_user_id === s.currentUserId || t.isOwner === true)
+           );
+         } catch (_) {}
         await ts.humanDelay(900, 2200, speedFactor);
         tsLog('info', 'إنشاء تيم جديد: ' + teamName);
         const team = await ts.createTeam({ token, name: teamName, netOpts });
@@ -2801,8 +2830,11 @@ const ts = require('./lib/trueStudio');
         try {
           await ts.navigateTo({ client, page: 'https://discord.com/developers/teams' });
           await ts.humanDelay(600, 1400, speedFactor);
-          const teams = await ts.listTeams({ token, netOpts });
-          availableTeams = teams.map(t => ({ id: t.id, name: t.name, appCount: t.apps?.length || 0 }));
+           const teams = await ts.listTeams({ token, netOpts });
+           const ownedTeams = teams.filter(t =>
+             t && (t.owner_user_id === s.currentUserId || t.isOwner === true)
+           );
+           availableTeams = ownedTeams.map(t => ({ id: t.id, name: t.name, appCount: t.apps?.length || 0 }));
           if (availableTeams.length) {
             // Use selectedTeamId if provided and valid, otherwise pick first
             const preferred = selectedTeamId ? availableTeams.find(t => t.id === selectedTeamId) : null;
