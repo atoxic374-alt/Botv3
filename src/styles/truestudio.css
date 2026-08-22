@@ -3464,3 +3464,70 @@
 .ts-lib-page-body { min-height: 260px; }
 .ts-library-toolbar .ts-input { box-sizing: border-box; }
 @media (max-width: 620px) { .ts-account-row { grid-template-columns: 1fr 1fr; } .ts-export-actions { width: 100%; } }
+
+
+/* ── Compact information hierarchy ─────────────────────────────────────── */
+.ts-compact-ui { max-width: 920px; gap: 12px; padding: 14px 16px 48px; }
+.ts-compact-ui .ts-brand { padding: 12px 16px 14px; border-radius: 16px; }
+.ts-compact-ui .ts-brand-name { font-size: 24px; }
+.ts-compact-ui .ts-brand-sub { font-size: 10px; letter-spacing: 1.6px; }
+.ts-compact-ui .ts-credit-panel { min-width: 164px; padding: 9px 11px; }
+.ts-compact-ui .ts-credit-name { font-size: 14px; }
+.ts-compact-ui .ts-credit-link { font-size: 10px; }
+.ts-compact-ui .ts-stats { gap: 10px; }
+.ts-compact-ui .ts-stat { padding: 14px 16px; border-radius: 15px; }
+.ts-compact-ui .ts-stat-label { font-size: 10px; letter-spacing: 1.4px; }
+.ts-compact-ui .ts-stat-value { margin-top: 6px; font-size: 24px; }
+.ts-compact-ui .ts-card { padding: 16px 18px; border-radius: 16px; }
+.ts-compact-ui .ts-card-head { margin-bottom: 12px; }
+.ts-compact-ui .ts-card-title { font-size: 12px; letter-spacing: 1.2px; }
+.ts-compact-ui .ts-card-title.ar { font-size: 14px; letter-spacing: 0; }
+.ts-compact-ui .ts-field { gap: 4px; margin-bottom: 10px; }
+.ts-compact-ui .ts-field-label { font-size: 11px; }
+.ts-compact-ui .ts-field-hint { font-size: 10px; line-height: 1.45; }
+.ts-compact-ui .ts-input, .ts-compact-ui .ts-select { padding: 10px 12px; border-radius: 10px; font-size: 12px; }
+.ts-compact-ui .ts-btn { padding: 8px 12px; border-radius: 10px; font-size: 12px; }
+.ts-compact-ui .ts-btn.big { padding: 11px 16px; font-size: 12px; letter-spacing: 1px; }
+.ts-compact-ui .ts-toggle-row { padding: 8px 2px; }
+.ts-compact-ui .ts-toggle-label { font-size: 12px; }
+.ts-compact-ui .ts-form-grid { gap: 10px; }
+.ts-compact-ui .ts-method-banner { padding: 8px 10px; border-radius: 10px; }
+.ts-compact-ui .ts-method-hint { font-size: 10px; }
+.ts-compact-ui .ts-actions { gap: 8px; padding-top: 2px; }
+.ts-compact-ui .ts-secondary-section { opacity: .92; }
+.ts-compact-ui .ts-log-wrap { margin-top: 0; }
+.ts-compact-ui .ts-log-toolbar { padding: 8px 10px; }
+.ts-compact-ui .ts-log { max-height: 250px; }
+.ts-compact-ui .ts-pfp-subtitle { font-size: 10px; line-height: 1.45; }
+.ts-compact-ui .ts-pfp-actions { gap: 7px; }
+.ts-compact-ui .ts-utility-actions { margin-top: 8px; }
+.ts-compact-ui .ts-library-trigger { padding: 14px 16px; }
+.ts-compact-ui .ts-library-trigger-sub { font-size: 10px; }
+.ts-compact-ui .ts-card-badge { line-height: 1.3; }
+@media (min-width: 760px) {
+  .ts-compact-ui .ts-accounts-card { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); column-gap: 18px; }
+  .ts-compact-ui .ts-accounts-card .ts-card-head { grid-column: 1 / -1; }
+  .ts-compact-ui .ts-accounts-card .ts-account-empty { grid-column: 1 / -1; }
+}
+@media (max-width: 620px) {
+  .ts-compact-ui { padding-inline: 10px; gap: 9px; }
+  .ts-compact-ui .ts-brand { align-items: flex-start; gap: 10px; }
+  .ts-compact-ui .ts-brand-name { font-size: 20px; }
+  .ts-compact-ui .ts-brand-sub { letter-spacing: .8px; }
+  .ts-compact-ui .ts-credit-panel { min-width: 0; padding: 7px 8px; }
+  .ts-compact-ui .ts-credit-kicker { font-size: 8px; }
+  .ts-compact-ui .ts-credit-name { font-size: 11px; }
+  .ts-compact-ui .ts-stats { grid-template-columns: 1fr 1fr; }
+  .ts-compact-ui .ts-card { padding: 13px 12px; }
+  .ts-compact-ui .ts-form-grid { grid-template-columns: 1fr; }
+  .ts-compact-ui .ts-actions .ts-btn.big { flex: 1 1 30%; }
+}
+
+.ts-compact-ui .ts-method-hint { display: none; }
+.ts-compact-ui .ts-field-hint:not(.ok):not(.warn) { max-height: 0; overflow: hidden; opacity: 0; margin: 0; transition: max-height .2s ease, opacity .2s ease, margin .2s ease; }
+.ts-compact-ui .ts-field:focus-within > .ts-field-hint:not(.ok):not(.warn) { max-height: 90px; opacity: .9; margin-top: 3px; }
+.ts-compact-ui .ts-card-head > div:first-child { min-width: 0; }
+.ts-compact-ui .ts-pfp-head { align-items: flex-start; }
+.ts-compact-ui .ts-rule-hint { padding: 8px 10px; margin: 8px 0; border-radius: 10px; font-size: 11px; }
+.ts-compact-ui .ts-actions { border-top: 1px solid var(--ts-stroke); padding-top: 12px; }
+.ts-compact-ui .ts-actions .ts-btn.big { box-shadow: none; }

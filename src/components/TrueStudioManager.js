@@ -399,13 +399,13 @@ export class TrueStudioManager {
     const sel = this.accounts.find(a => a.email === this.selectedEmail) || null;
 
     this.contentArea.innerHTML = `
-      <div class="ts-wrap" dir="rtl">
+      <div class="ts-wrap ts-compact-ui" dir="rtl">
         <div class="ts-brand">
           <div class="ts-brand-main">
             <div class="ts-brand-pulse" title="online"></div>
             <div class="ts-brand-title">
               <div class="ts-brand-name">Bot-Studio</div>
-              <div class="ts-brand-sub">Automation Ultra · v${VERSION}</div>
+              <div class="ts-brand-sub">إدارة البوتات · v${VERSION}</div>
             </div>
           </div>
           <div class="ts-credit-panel" aria-label="Owner credit">
@@ -432,7 +432,7 @@ export class TrueStudioManager {
         <div id="ts-account-pool">${this._renderAccountPool(s)}</div>
 
         <!-- Account picker -->
-        <div class="ts-card">
+        <div class="ts-card ts-accounts-card">
           <div class="ts-card-head">
             <div class="ts-card-title ar">${t('ts.accounts_section')}</div>
           </div>
@@ -459,7 +459,7 @@ export class TrueStudioManager {
         </div>
 
         <!-- Selected account credentials -->
-        <div class="ts-card">
+        <div class="ts-card ts-credentials-card">
           <div class="ts-card-head">
             <div class="ts-card-title ar">${t('ts.account_data')}</div>
           </div>
@@ -505,9 +505,9 @@ export class TrueStudioManager {
         ${this._renderProfilesCard()}
 
         <!-- Automation rules -->
-        <div class="ts-card">
+        <div class="ts-card ts-rules-card">
           <div class="ts-card-head">
-            <div class="ts-card-title">AUTOMATION RULES</div>
+            <div class="ts-card-title ar">قواعد التشغيل</div>
           </div>
           ${this._renderToggle('createTeams', t('ts.rule_create_teams'))}
           ${this._renderToggle('createBots', t('ts.rule_create_bots'))}
@@ -553,17 +553,17 @@ export class TrueStudioManager {
         <!-- Action buttons -->
         <div class="ts-actions">
           <button class="ts-btn danger big" id="ts-stop"
-            ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>${t('ts.stop')}</button>
+            ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>إيقاف</button>
           <button class="ts-btn big ts-pause-btn" id="ts-pause"
             ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>
-            ${s.state === 'paused' ? 'استئناف' : 'إيقاف مؤقت'}
+            ${s.state === 'paused' ? 'استئناف' : 'توقف مؤقت'}
           </button>
           <button class="ts-btn mint big" id="ts-start"
             ${['running', 'waiting', 'paused'].includes(s.state) || this._sessionStartInFlight ? 'disabled' : ''}>${t('ts.start_session')}</button>
         </div>
 
         <!-- Live log -->
-        <div class="ts-log-wrap">
+        <div class="ts-log-wrap ts-secondary-section">
           ${this._renderLogToolbar(s.log || [])}
           <div class="ts-log" id="ts-log">${this._renderLog(s.log || [])}</div>
         </div>
@@ -580,15 +580,15 @@ export class TrueStudioManager {
     const resume = this._resumeInfo?.session;
     const checks = this._dryRunResult?.checks || [];
     return `<div class="ts-card ts-utility-card">
-      <div class="ts-card-head"><div class="ts-card-title ar">سهولة التشغيل</div><span class="ts-utility-mark" aria-hidden="true"></span></div>
+      <div class="ts-card-head"><div class="ts-card-title ar">تشغيل سريع</div><span class="ts-utility-mark" aria-hidden="true"></span></div>
       <div class="ts-profile-row">
         <select id="ts-profile-select" class="ts-select"><option value="">اختيار إعداد محفوظ…</option>${this.profiles.map(p => `<option value="${escapeAttr(p.id)}" ${p.id === this.selectedProfileId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}</select>
-        <button class="ts-btn" id="ts-profile-save">حفظ الإعداد الحالي</button>
+        <button class="ts-btn" id="ts-profile-save">حفظ</button>
         <button class="ts-btn danger" id="ts-profile-delete" ${this.selectedProfileId ? '' : 'disabled'}>حذف</button>
       </div>
       <div class="ts-utility-actions">
-        <button class="ts-btn mint" id="ts-dry-run"><span class="ts-drawn-icon check" aria-hidden="true"><i></i></span> فحص قبل التشغيل</button>
-        ${resume && resume.state !== 'done' ? `<button class="ts-btn" id="ts-resume"><span class="ts-drawn-icon refresh" aria-hidden="true"><i></i></span> استكمال آخر جلسة (${Math.max(0, (resume.config?.count || 0) - (resume.done || 0))} متبقٍ)</button>` : ''}
+        <button class="ts-btn mint" id="ts-dry-run"><span class="ts-drawn-icon check" aria-hidden="true"><i></i></span> فحص</button>
+        ${resume && resume.state !== 'done' ? `<button class="ts-btn" id="ts-resume"><span class="ts-drawn-icon refresh" aria-hidden="true"><i></i></span> استكمال (${Math.max(0, (resume.config?.count || 0) - (resume.done || 0))})</button>` : ''}
       </div>
       ${checks.length ? `<div class="ts-dry-run-result ${this._dryRunResult.ok ? 'ok' : 'warn'}">${checks.map(c => `<div class="ts-check-row"><span class="ts-check-dot ${c.ok ? 'ok' : 'bad'}"></span><b>${escapeHtml(c.label)}</b><span>${escapeHtml(c.detail || '')}</span></div>`).join('')}</div>` : ''}
     </div>`;
@@ -629,8 +629,8 @@ export class TrueStudioManager {
       <div class="ts-card ts-pfp-card">
         <div class="ts-card-head ts-pfp-head">
           <div>
-            <div class="ts-card-title ar"><span class="ts-drawn-icon brush" aria-hidden="true"><i></i></span> Pfp · صورة وبنر البوتات</div>
-            <div class="ts-pfp-subtitle">احفظ هوية موحدة — أي بوت جديد يأخذها تلقائياً. Pfp all موجود في المكتبة.</div>
+            <div class="ts-card-title ar"><span class="ts-drawn-icon brush" aria-hidden="true"><i></i></span> هوية البوت</div>
+            <div class="ts-pfp-subtitle">صورة موحدة للبوتات الجديدة. ويمكن تطبيقها على المكتبة.</div>
           </div>
           <button class="ts-btn ts-pfp-preview-toggle${showPrev ? ' active' : ''}" id="ts-pfp-preview-btn"
             title="${showPrev ? 'إخفاء المعاينة' : 'إظهار المعاينة'}">
@@ -650,29 +650,29 @@ export class TrueStudioManager {
         <div class="ts-pfp-upload-grid">
           <label class="ts-pfp-drop">
             <span class="ts-pfp-drop-icon avatar" aria-hidden="true"><i></i></span>
-            <span class="ts-pfp-drop-title">Avatar طبيعي للبوت</span>
+            <span class="ts-pfp-drop-title">صورة البوت</span>
             <span class="ts-pfp-drop-hint">PNG · JPG · GIF · WebP</span>
             <input type="file" id="ts-pfp-avatar" accept="image/png,image/jpeg,image/gif,image/webp" />
           </label>
           <label class="ts-pfp-drop banner">
             <span class="ts-pfp-drop-icon banner" aria-hidden="true"><i></i></span>
-            <span class="ts-pfp-drop-title">Banner طبيعي للبوت</span>
-            <span class="ts-pfp-drop-hint">يفضل مقاس واسع مثل دسكورد</span>
+            <span class="ts-pfp-drop-title">بنر البوت</span>
+            <span class="ts-pfp-drop-hint">يفضل صورة عريضة</span>
             <input type="file" id="ts-pfp-banner" accept="image/png,image/jpeg,image/gif,image/webp" />
           </label>
         </div>
         <div class="ts-pfp-actions">
-          <button class="ts-btn ts-pfp-clear" id="ts-pfp-clear"><span class="ts-drawn-icon broom" aria-hidden="true"><i></i></span> مسح المحفوظ</button>
-          <button class="ts-btn mint ts-pfp-save" id="ts-pfp-save"><span class="ts-drawn-icon save" aria-hidden="true"><i></i></span> حفظ Pfp</button>
+          <button class="ts-btn ts-pfp-clear" id="ts-pfp-clear"><span class="ts-drawn-icon broom" aria-hidden="true"><i></i></span> مسح الهوية</button>
+          <button class="ts-btn mint ts-pfp-save" id="ts-pfp-save"><span class="ts-drawn-icon save" aria-hidden="true"><i></i></span> حفظ الهوية</button>
           <span class="ts-field-hint ts-pfp-save-hint"><span class="ts-drawn-icon clock" aria-hidden="true"><i></i></span> آخر حفظ: ${escapeHtml(stamp)}</span>
         </div>
         <div class="ts-auto-intents-row">
           <span class="ts-auto-intents-label">
             ${icon('bolt', 'ts-inline-icon')}
-            تفعيل iNTeNT تلقائياً عند إنشاء أي بوت جديد
+            تفعيل Intents تلقائياً
           </span>
           <button class="ts-btn${this._autoIntents ? ' mint' : ''}" id="ts-auto-intents-btn"
-            title="${this._autoIntents ? 'مفعّل — كل بوت جديد سيحصل على Intents تلقائياً' : 'معطّل'}">
+            title="${this._autoIntents ? 'مفعّل' : 'معطّل'}">
             ${this._autoIntents ? 'ON' : 'OFF'}
           </button>
         </div>
@@ -790,7 +790,7 @@ export class TrueStudioManager {
       if (btn) {
         btn.classList.toggle('mint', next);
         btn.textContent = next ? 'ON' : 'OFF';
-        btn.title = next ? 'مفعّل — كل بوت جديد سيحصل على Intents تلقائياً' : 'معطّل';
+        btn.title = next ? 'مفعّل' : 'معطّل';
       }
       showNotification(next ? 'Auto-intents مفعّل' : 'Auto-intents معطّل', next ? 'success' : 'info');
     } catch (e) { showNotification('فشل تغيير Auto-intents: ' + (e.message || e), 'error'); }
@@ -825,36 +825,36 @@ export class TrueStudioManager {
       const r = await window.electronAPI.tsSavePfp({ avatar, banner });
       if (!r?.success && r?.error) throw new Error(r.error);
       this.pfp = r?.pfp || { avatar, banner, updatedAt: Date.now() };
-      showNotification(clear ? 'تم مسح Pfp المحفوظ' : 'تم حفظ Pfp — سيطبق على البوتات الجديدة', 'success');
+      showNotification(clear ? 'تم مسح الهوية' : 'تم حفظ الهوية — سيطبق على البوتات الجديدة', 'success');
       // Update the library modal pfp-all button live if it's already open
       const pfpAllBtn = this._libModal?.querySelector('#ts-lib-pfp-all');
       if (pfpAllBtn) {
         const hasPfp = !!(this.pfp?.avatar || this.pfp?.banner);
         pfpAllBtn.disabled = !hasPfp;
         pfpAllBtn.classList.toggle('mint', hasPfp);
-        pfpAllBtn.title = hasPfp ? 'تطبيق Pfp المحفوظ على كل البوتات ✓' : 'احفظ Avatar أو Banner أولاً';
+        pfpAllBtn.title = hasPfp ? 'تطبيق الهوية على كل البوتات ✓' : 'احفظ صورة أو بنر أولاً';
       }
       this.render();
     } catch (e) {
-      showNotification('فشل حفظ Pfp: ' + (e.message || e), 'error');
+      showNotification('فشل حفظ الهوية: ' + (e.message || e), 'error');
     } finally {
       if (activeBtn) { activeBtn.disabled = false; }
     }
   }
 
   async _applyPfpAll() {
-    if (!this.pfp?.avatar && !this.pfp?.banner) { showNotification('احفظ Avatar أو Banner أولاً', 'error'); return; }
-    if (this._pfpAllRunning) { showNotification('Pfp all جاري التنفيذ بالفعل…', 'info'); return; }
-    if (!this.selectedEmail) { showNotification('اختر حساباً أولاً لتطبيق Pfp all', 'error'); return; }
+    if (!this.pfp?.avatar && !this.pfp?.banner) { showNotification('احفظ صورة أو بنر أولاً', 'error'); return; }
+    if (this._pfpAllRunning) { showNotification('تطبيق الهوية جاري التنفيذ بالفعل…', 'info'); return; }
+    if (!this.selectedEmail) { showNotification('اختر حساباً أولاً', 'error'); return; }
     const selectedIds = this._selectedAppIds();
     const scopeLabel = selectedIds.length ? `${selectedIds.length} بوت محدد` : 'كل بوتات المكتبة';
-    const confirmed = await showConfirm(`تطبيق الصورة والبنر المحفوظين على ${scopeLabel}؟\n(يُحدَّث البوت + أيقونة/بنر التطبيق في المكتبة)`, { confirmText: 'Pfp all', cancelText: 'إلغاء' });
+    const confirmed = await showConfirm(`تطبيق الهوية على ${scopeLabel}؟\n(يُحدَّث البوت + أيقونة/بنر التطبيق في المكتبة)`, { confirmText: 'تطبيق الهوية', cancelText: 'إلغاء' });
     if (!confirmed) return;
 
     this._pfpAllRunning = true;
     this._libModal?.querySelectorAll('#ts-lib-pfp-all').forEach(b => { b.disabled = true; });
 
-    const prog = this._openBatchProgressModal('Pfp all', selectedIds.length ? `تطبيق الصورة والبنر على ${selectedIds.length} بوت محدد…` : 'تطبيق الصورة والبنر على بوتات المكتبة…');
+    const prog = this._openBatchProgressModal('تطبيق الهوية', selectedIds.length ? `تطبيق الهوية على ${selectedIds.length} بوت محدد…` : 'تطبيق الهوية على البوتات…');
     prog.setIndeterminate(true);
     prog.setStatus('جاري تحميل قائمة البوتات…');
 
@@ -1080,18 +1080,18 @@ export class TrueStudioManager {
     if (!teams.length) {
       return `<div class="ts-field" style="margin:8px 0 0;">
         <div class="ts-field-label">التيم المستهدف</div>
-        <div class="ts-field-hint warn" style="color:#f5a623;">لا توجد تيمات — سيتم الإنشاء بدون تيم، أو أنشئ تيماً من المكتبة أولاً</div>
+        <div class="ts-field-hint warn" style="color:#f5a623;">لا توجد تيمات متاحة.</div>
         <button class="ts-btn" id="ts-teams-reload" style="margin-top:6px;font-size:12px;">${icon('refresh', 'ts-inline-icon')} إعادة تحميل التيمات</button>
       </div>`;
     }
     return `
       <div class="ts-field" style="margin:8px 0 0;" id="ts-team-selector-field">
-        <div class="ts-field-label">التيم المستهدف (للربط التلقائي)</div>
+        <div class="ts-field-label">التيم المستهدف</div>
         <select class="ts-input" id="ts-team-select">
-          <option value="">— أحدث تيم تلقائياً (Auto-rotate) —</option>
+          <option value="">اختيار تلقائي</option>
           ${teams.map(tm => `<option value="${escapeAttr(tm.id)}" ${tm.id === this.form.selectedTeamId ? 'selected' : ''}>${escapeHtml(tm.name)} (${tm.appCount || 0}/25)</option>`).join('')}
         </select>
-        <div class="ts-field-hint">سيتم التبديل تلقائياً لتيم آخر أو إنشاء تيم Studio جديد عند امتلاء التيم (25 تطبيق)</div>
+        <div class="ts-field-hint">ينتقل تلقائياً عند امتلاء التيم.</div>
       </div>
     `;
   }
@@ -1101,37 +1101,37 @@ export class TrueStudioManager {
     {
       id: 'residential',
       name: 'Residential',
-      nameAr: 'منزلي متغير',
+      nameAr: 'سكني',
       icon: icon('layers'),
       trustLabel: 'عالي',
       trustColor: '#3ba55d',
       costPer1000: '~$0.21',
       pricePerGB: '$4.20/GB',
-      desc: 'IPs منزلية حقيقية من شركات الإنترنت — الأصعب كشفاً لـ Discord',
+      desc: 'IP سكني · ثقة عالية',
       recommended: true,
       protocol: 'http',
       batchSize: 3,
       speed: 'veryfast',
       zoneType: 'Residential',
-      zoneHint: 'أنشئ Zone من نوع Residential (Pay As You Go)',
+      zoneHint: 'Zone سكني',
       bdUrl: 'https://brightdata.com/cp/zones',
     },
     {
       id: 'isp',
       name: 'ISP',
-      nameAr: 'مزود خدمة',
+      nameAr: 'مزود إنترنت',
       icon: icon('shield'),
       trustLabel: 'عالي جداً',
       trustColor: '#5865f2',
       costPer1000: '~$0.75',
       pricePerGB: '$15/GB',
-      desc: 'IPs حقيقية من ISPs — أسرع من Residential ومستوى ثقة أعلى',
+      desc: 'IP مزود إنترنت · سريع',
       recommended: false,
       protocol: 'http',
       batchSize: 4,
       speed: 'veryfast',
       zoneType: 'ISP',
-      zoneHint: 'أنشئ Zone من نوع ISP Proxies',
+      zoneHint: 'Zone مزود إنترنت',
       bdUrl: 'https://brightdata.com/cp/zones',
     },
     {
@@ -1143,13 +1143,13 @@ export class TrueStudioManager {
       trustColor: '#faa61a',
       costPer1000: '~$0.03',
       pricePerGB: '$0.60/GB',
-      desc: 'الأرخص والأسرع — Discord يعرف بعض نطاقات الـ Datacenter',
+      desc: 'الأرخص والأسرع',
       recommended: false,
       protocol: 'http',
       batchSize: 5,
       speed: 'veryfast',
       zoneType: 'Datacenter',
-      zoneHint: 'أنشئ Zone من نوع Datacenter (Shared)',
+      zoneHint: 'Zone مركز بيانات',
       bdUrl: 'https://brightdata.com/cp/zones',
     },
   ];
@@ -1171,7 +1171,7 @@ export class TrueStudioManager {
     const quickSetupPanel = qsOpen ? `
       <div style="margin-top:8px;padding:10px;background:rgba(0,0,0,.25);border-radius:8px;border:1px solid rgba(255,255,255,.07);">
         <div style="font-size:11px;font-weight:600;margin-bottom:8px;color:var(--ts-muted,#7e8592);">
-          اختر نوع الـ Zone المناسب لحالتك — السعر محسوب لكل 1000 بوت (3 طلبات/بوت × ~50KB)
+          اختر نوع الاتصال المناسب.
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
           ${TrueStudioManager.BD_PRESETS.map(p => `
@@ -1185,7 +1185,7 @@ export class TrueStudioManager {
                 <span style="font-size:10px;color:${p.trustColor};">${p.trustLabel}</span>
               </div>
               <div style="font-size:11px;font-weight:700;text-align:center;color:#fff;">${p.costPer1000}</div>
-              <div style="font-size:9px;text-align:center;color:var(--ts-muted,#7e8592);">لكل 1000 بوت</div>
+              <div style="font-size:9px;text-align:center;color:var(--ts-muted,#7e8592);">لكل 1000</div>
               <div style="font-size:9px;text-align:center;color:var(--ts-muted,#7e8592);line-height:1.4;margin-top:2px;">${p.desc}</div>
               <button class="ts-btn" data-qs-apply="${p.id}"
                 style="margin-top:6px;font-size:11px;padding:4px 8px;${p.recommended ? 'background:#3ba55d;' : ''}">
@@ -1220,14 +1220,14 @@ export class TrueStudioManager {
 
     // ── Bright Data credential form (shown when toggle is ON) ───────────────
     const bdPassPlaceholder = bd._hasSavedPassword && !bd.zonePassword
-      ? '••••••••  (محفوظة — اتركها فارغة للإبقاء عليها)'
+      ? '••••••••  (محفوظة)'
       : 'Zone Password';
     const bdForm = bd.enabled ? `
       <div style="margin-top:8px;display:grid;gap:6px;">
         ${presetStrip}
         ${quickSetupPanel}
         <input type="text" id="ts-bd-customer" class="ts-input ltr"
-          placeholder="Customer ID أو الصق username كامل من Bright Data"
+          placeholder="Customer ID"
           value="${escapeAttr(bd.customerId || '')}" autocomplete="off" />
         <div class="ts-account-row">
           <input type="text" id="ts-bd-zone" class="ts-input ltr"
@@ -1256,19 +1256,18 @@ export class TrueStudioManager {
           ` : ''}
         </div>
         <div class="ts-field-hint" style="line-height:1.6;">
-          انسخ من Bright Data: <b>Username</b> مثل brd-customer-...-zone-...، و<b>Password</b>، ثم اختر HTTP 33335 أو SOCKS5h 22228.<br>
-          زر الاختبار يجرب 3 جلسات مختلفة ثم يفحص Discord/CDN/BRD test targets. إذا ظهر <b>Rotation OK · Targets 9/9</b> فالإعداد جاهز قبل التشغيل.
+          أدخل بيانات Zone ثم اضغط «اختبار» قبل البدء.
         </div>
       </div>
     ` : `
       <div class="ts-account-row" style="align-items:flex-start;margin-top:6px;">
         <textarea id="ts-proxy-url" class="ts-input ltr" rows="3"
           style="resize:vertical;font-size:11px;line-height:1.6;min-height:60px;font-family:monospace;"
-          placeholder="بروكسي واحد لكل سطر — يتغير IP مع كل بوت&#10;socks5://user:pass@host:port&#10;http://user:pass@host:port">${escapeHtml(this.form.proxyUrl || '')}</textarea>
+          placeholder="بروكسي واحد في كل سطر">${escapeHtml(this.form.proxyUrl || '')}</textarea>
         <button class="ts-btn" id="ts-proxy-test" style="white-space:nowrap;align-self:flex-start;">اختبار</button>
       </div>
       ${proxyStatus ? `<div style="margin-top:4px;">${proxyStatus}</div>` : ''}
-      <div class="ts-field-hint">http · https · socks · socks5h — كل بوت يستخدم IP مختلف عند وجود عدة بروكسيات</div>
+      <div class="ts-field-hint">HTTP · HTTPS · SOCKS5H</div>
     `;
 
     // ── Proxy header row with Bright Data toggle ────────────────────────────
@@ -1292,13 +1291,13 @@ export class TrueStudioManager {
               <span class="ts-speed-pill-sub">${s.sub}</span>
             </label>`).join('')}
         </div>
-        <div class="ts-field-hint">Ultra/Very Fast: تأخيرات صفرية — استخدم مع Proxy لتجنب الحظر</div>
+        <div class="ts-field-hint">السرعات العالية تحتاج Proxy.</div>
       </div>
 
       <div class="ts-field" style="margin-top:8px;">
         <div class="ts-field-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <span>${bd.enabled ? 'Bright Data Proxy' : 'Proxy للجلسة'}</span>
+            <span>${bd.enabled ? 'Bright Data' : 'Proxy'}</span>
             ${!bd.enabled
               ? `<span style="font-size:10px;color:var(--ts-muted,#7e8592);">(اختياري)</span>${proxyCountBadge}`
               : `<span style="font-size:10px;color:#3ba55d;">IP rotation تلقائي</span>`}
@@ -1314,7 +1313,7 @@ export class TrueStudioManager {
               <span style="font-size:10px;color:var(--ts-muted,#7e8592);">Bright Data</span>
               <div class="ts-toggle ${bd.enabled ? 'on' : ''}" id="ts-bd-toggle"
                 role="switch" aria-checked="${bd.enabled}"
-                title="استخدام Bright Data rotating proxy — IP جديد لكل بوت تلقائياً"></div>
+                title="تبديل IP تلقائياً"></div>
             </label>
           </div>
         </div>
@@ -1324,19 +1323,18 @@ export class TrueStudioManager {
       ${(bd.enabled || (this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length > 1) ? `
       <div class="ts-field" style="margin-top:8px;">
         <div class="ts-field-label" style="display:flex;align-items:center;gap:6px;">
-          <span>حجم الدُّفعة المتوازية</span>
+          <span>حجم الدفعة</span>
           <span style="font-size:10px;color:#3ba55d;background:rgba(59,165,93,.12);padding:1px 6px;border-radius:4px;">IP Rotation نشط</span>
         </div>
         <select class="ts-input" id="ts-batch-size">
-          <option value="1" ${(this.form.batchSize||1)===1?'selected':''}>1 — تسلسلي (الوضع الأصلي)</option>
-          <option value="2" ${(this.form.batchSize||1)===2?'selected':''}>2 بوت في نفس الوقت</option>
-          <option value="3" ${(this.form.batchSize||1)===3?'selected':''}>3 بوت في نفس الوقت</option>
-          <option value="4" ${(this.form.batchSize||1)===4?'selected':''}>4 بوت في نفس الوقت</option>
-          <option value="5" ${(this.form.batchSize||1)===5?'selected':''}>5 بوت في نفس الوقت — أقصى سرعة</option>
+          <option value="1" ${(this.form.batchSize||1)===1?'selected':''}>1 — تسلسلي</option>
+          <option value="2" ${(this.form.batchSize||1)===2?'selected':''}>2 بوت</option>
+          <option value="3" ${(this.form.batchSize||1)===3?'selected':''}>3 بوت</option>
+          <option value="4" ${(this.form.batchSize||1)===4?'selected':''}>4 بوت</option>
+          <option value="5" ${(this.form.batchSize||1)===5?'selected':''}>5 بوت — سريع</option>
         </select>
         <div class="ts-field-hint">
-          يعمل على دفعات فقط عند تفعيل Bright Data أو وضع أكثر من بروكسي. اللوق سيعرض:
-          "وضع الدُّفعات المتوازية" ثم "دُفعة: bot-001 · bot-002 ..." عند التشغيل.
+          يعمل مع Bright Data أو عدة بروكسيات.
         </div>
       </div>
       ` : ''}
@@ -1825,12 +1823,12 @@ export class TrueStudioManager {
             </button>
             <button class="ts-btn${(this.pfp?.avatar || this.pfp?.banner) ? ' mint' : ''}" id="ts-lib-pfp-all"
               ${(!this.pfp?.avatar && !this.pfp?.banner) ? 'disabled' : ''}
-              title="${(this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق Pfp المحفوظ على كل البوتات' : 'احفظ Avatar أو Banner أولاً'}">
-              <span class="ts-drawn-icon image" aria-hidden="true"><i></i></span> Pfp all
+              title="${(this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً'}">
+              <span class="ts-drawn-icon image" aria-hidden="true"><i></i></span> تطبيق الهوية
             </button>
             <button class="ts-btn" id="ts-lib-bulk-invite"
               ${!this.library ? 'disabled' : ''}
-              title="توليد روابط دعوة لكل البوتات وإضافتهم تلقائياً للسيرفرات">
+              title="إنشاء روابط الدعوة">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Bulk Invite
             </button>
             <button class="ts-btn ts-reset-all-btn" id="ts-lib-reset-all"
