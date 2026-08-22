@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local encryption material and runtime data
+/data/.master_key
+/data/users/
