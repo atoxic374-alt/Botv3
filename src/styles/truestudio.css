@@ -3531,3 +3531,45 @@
 .ts-compact-ui .ts-rule-hint { padding: 8px 10px; margin: 8px 0; border-radius: 10px; font-size: 11px; }
 .ts-compact-ui .ts-actions { border-top: 1px solid var(--ts-stroke); padding-top: 12px; }
 .ts-compact-ui .ts-actions .ts-btn.big { box-shadow: none; }
+
+
+/* ── Contrast-safe icon palette ─────────────────────────────────────────── */
+.ts-compact-ui .ic { color: var(--ts-mint); stroke: currentColor; }
+.ts-compact-ui .ts-btn .ic { color: currentColor; }
+.ts-compact-ui .ts-card-reset-icon,
+.ts-compact-ui .ts-card-intents-icon,
+.ts-compact-ui .ts-bt-show .ic,
+.ts-compact-ui .ts-bt-delete .ic { color: var(--ts-mint); }
+.ts-compact-ui .ts-btn.danger .ic { color: var(--ts-danger); }
+.ts-compact-ui .ts-btn.mint .ic { color: #10392f; }
+.ts-compact-ui .ts-drawn-icon { filter: drop-shadow(0 2px 7px rgba(0,0,0,.42)); }
+.ts-compact-ui .ts-drawn-icon.image { color: var(--ts-mint); border-color: currentColor; }
+.ts-compact-ui .ts-drawn-icon.check { color: var(--ts-mint); }
+.ts-compact-ui .ts-drawn-icon.refresh { color: var(--ts-mint); }
+.ts-compact-ui .ts-drawn-icon.bolt { color: var(--ts-mint); }
+body.light-theme .ts-compact-ui .ic { color: #0b7663; }
+body.light-theme .ts-compact-ui .ts-btn.mint .ic { color: #f4fffb; }
+body.light-theme .ts-compact-ui .ts-drawn-icon { filter: drop-shadow(0 2px 5px rgba(10,50,42,.2)); }
+
+
+/* ── Collapsed secondary credentials ────────────────────────────────────── */
+.ts-method-collapsible { margin-top: 10px; border: 1px solid var(--ts-stroke); border-radius: 11px; background: rgba(255,255,255,.018); }
+.ts-method-collapsible summary { display: flex; align-items: center; gap: 8px; padding: 9px 10px; cursor: pointer; list-style: none; color: var(--ts-muted); font-size: 11px; }
+.ts-method-collapsible summary::-webkit-details-marker { display: none; }
+.ts-method-collapsible summary .ts-method-hint { display: inline; color: var(--ts-muted); font-size: 10px; }
+.ts-collapse-arrow { width: 7px; height: 7px; margin-inline-start: auto; border-inline-end: 1px solid currentColor; border-block-end: 1px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .18s ease; }
+.ts-method-collapsible[open] .ts-collapse-arrow { transform: rotate(225deg) translateY(-1px); }
+.ts-method-body { padding: 2px 10px 2px; }
+.ts-method-body .ts-field { margin-bottom: 9px; }
+.ts-credentials-card > .ts-field:first-of-type { margin-bottom: 0; }
+
+
+/* ── Optional settings disclosure ───────────────────────────────────────── */
+.ts-optional-card { padding: 0 !important; overflow: hidden; }
+.ts-optional-summary { display: flex; align-items: center; gap: 8px; padding: 13px 16px; margin: 0 !important; cursor: pointer; list-style: none; }
+.ts-optional-summary::-webkit-details-marker { display: none; }
+.ts-collapse-title { color: var(--ts-text); font-size: 13px; font-weight: 700; }
+.ts-optional-summary .ts-collapse-arrow { margin-inline-start: auto; }
+.ts-optional-body { padding: 0 16px 8px; }
+.ts-optional-body > .ts-card-head { display: none; }
+.ts-optional-body .ts-field:last-child { margin-bottom: 2px; }

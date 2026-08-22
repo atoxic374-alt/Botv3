@@ -473,30 +473,28 @@ export class TrueStudioManager {
             <div class="ts-field-label">Discord User Token</div>
             <input type="password" id="ts-direct-token" class="ts-input ltr"
               value=""
-              placeholder="${sel?.hasDirectToken ? `•••••••••••• ${t('ts.direct_token_saved_ph')}` : t('ts.direct_token_ph')}"
+              placeholder="${sel?.hasDirectToken ? `•••••• ${t('ts.direct_token_saved_ph')}` : t('ts.direct_token_ph')}"
               autocomplete="off" />
             ${sel?.hasDirectToken ? `<div class="ts-field-hint ok">${t('ts.direct_token_saved_hint')}</div>` : `<div class="ts-field-hint">${t('ts.direct_token_how')}</div>`}
           </div>
 
-          <!-- ── Method B: Email + Password ──────────────── -->
-          <div class="ts-method-banner" style="margin-top:10px;">
-            <span class="ts-method-badge email">${t('ts.method_b_badge')}</span>
-            <span class="ts-method-hint">${t('ts.method_b_hint')}</span>
-          </div>
-          <div class="ts-form-grid">
-            <div class="ts-field">
-              <div class="ts-field-label">Email</div>
-              <input type="email" id="ts-email" class="ts-input ltr" value="${escapeAttr(this.form.email)}" placeholder="account@example.com" autocomplete="off" />
+          <details class="ts-method-collapsible">
+            <summary><span class="ts-method-badge email">${t('ts.method_b_badge')}</span><span class="ts-method-hint">${t('ts.method_b_hint')}</span><span class="ts-collapse-arrow"></span></summary>
+            <div class="ts-form-grid ts-method-body">
+              <div class="ts-field">
+                <div class="ts-field-label">Email</div>
+                <input type="email" id="ts-email" class="ts-input ltr" value="${escapeAttr(this.form.email)}" placeholder="name@example.com" autocomplete="off" />
+              </div>
+              <div class="ts-field">
+                <div class="ts-field-label">Password</div>
+                <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" />
+              </div>
+              <div class="ts-field ts-method-totp">
+                <div class="ts-field-label">2FA Secret</div>
+                <input type="text" id="ts-totp" class="ts-input totp" value="" placeholder="${sel?.hasTotp ? '••••••••' : '2FA secret'}" autocomplete="off" />
+              </div>
             </div>
-            <div class="ts-field">
-              <div class="ts-field-label">Password</div>
-              <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" />
-            </div>
-          </div>
-          <div class="ts-field">
-            <div class="ts-field-label">2FA Auth Secret Key</div>
-            <input type="text" id="ts-totp" class="ts-input totp" value="" placeholder="${sel?.hasTotp ? '•••• •••• •••• ••••' : 'BASE32 SECRET'}" autocomplete="off" />
-          </div>
+          </details>
         </div>
 
         <!-- Bulk token import -->
@@ -640,11 +638,11 @@ export class TrueStudioManager {
         </div>
         <div class="ts-pfp-preview-wrap${showPrev ? ' open' : ''}">
           <div class="ts-pfp-preview">
-            <div class="ts-pfp-banner">${hasBanner ? `<img src="${this.pfp.banner}" alt="banner">` : '<span><b class="ts-drawn-icon galaxy" aria-hidden="true"><i></i></b> Banner Preview</span>'}</div>
+            <div class="ts-pfp-banner">${hasBanner ? `<img src="${this.pfp.banner}" alt="banner">` : '<span><b class="ts-drawn-icon galaxy" aria-hidden="true"><i></i></b> معاينة البنر</span>'}</div>
             <div class="ts-pfp-avatar">${hasAvatar ? `<img src="${this.pfp.avatar}" alt="avatar">` : '<span class="ts-drawn-bot" aria-hidden="true"><i></i></span>'}</div>
             <div class="ts-pfp-orbit one" aria-hidden="true"><i></i></div>
             <div class="ts-pfp-orbit two" aria-hidden="true"><i></i></div>
-            <div class="ts-pfp-chip"><span class="ts-drawn-icon shield" aria-hidden="true"><i></i></span> Saved identity</div>
+            <div class="ts-pfp-chip"><span class="ts-drawn-icon shield" aria-hidden="true"><i></i></span> محفوظ</div>
           </div>
         </div>
         <div class="ts-pfp-upload-grid">
@@ -1014,8 +1012,14 @@ export class TrueStudioManager {
     const pending = lines.length;
     const saved = (this.accounts || []).filter(a => /^tok-\d+@local$/.test(a.email || '')).length;
     return `
-      <div class="ts-card">
-        <div class="ts-card-head">
+      <details class="ts-card ts-optional-card ts-bulk-card">
+        <summary class="ts-card-head ts-optional-summary">
+          <span class="ts-collapse-title">${t('ts.bulk_tokens_title')}</span>
+          ${saved > 0 ? `<span class="ts-card-badge">${saved}</span>` : ''}
+          <span class="ts-collapse-arrow"></span>
+        </summary>
+        <div class="ts-optional-body">
+        <div class="ts-card-head ts-hidden-card-head">
           <div class="ts-card-title ar">${t('ts.bulk_tokens_title')}</div>
           ${saved > 0 ? `<div class="ts-card-badge" style="background:var(--mint,#7ce0c4);color:#0a0e1a;font-size:11px;padding:2px 9px;border-radius:20px;font-weight:700;">${saved} محفوظ</div>` : ''}
         </div>
@@ -1033,7 +1037,8 @@ export class TrueStudioManager {
             ${t('ts.bulk_tokens_save')}${pending > 0 ? ` (${pending})` : ''}
           </button>
         </div>
-      </div>`;
+        </div>
+      </details>`;
   }
 
   _optionLabel(a) {
@@ -1462,7 +1467,12 @@ export class TrueStudioManager {
         <button class="ts-verify-popup-close" id="ts-captcha-verify-dismiss">×</button>
       </div>` : '';
     return `
-      <div class="ts-card" id="ts-captcha-card" style="margin-top:14px;">
+      <details class="ts-card ts-optional-card" id="ts-captcha-card">
+        <summary class="ts-card-head ts-optional-summary">
+          <span class="ts-collapse-title">${escapeHtml(t('ts.captcha_settings_title') || 'CAPTCHA')}</span>
+          <span class="ts-collapse-arrow"></span>
+        </summary>
+        <div class="ts-optional-body">
         <div class="ts-card-head">
           <div class="ts-card-title">${escapeHtml(t('ts.captcha_settings_title') || 'CAPTCHA SOLVER')}</div>
           <div class="ts-captcha-status ${hasKey ? 'on' : 'off'}">${hasKey
@@ -1504,7 +1514,8 @@ export class TrueStudioManager {
           </div>
           <div class="ts-toggle ${fbOn ? 'on' : ''} ${fbLocked ? 'disabled' : ''}" id="ts-captcha-fallback" role="switch" aria-checked="${fbOn}" ${fbLocked ? 'aria-disabled="true"' : ''}></div>
         </div>
-      </div>
+        </div>
+      </details>
     `;
   }
 
@@ -1818,8 +1829,8 @@ export class TrueStudioManager {
           <div class="ts-lib-head-actions">
             <button class="ts-btn ts-intents-all-btn" id="ts-lib-intents-all"
               ${(!this.selectedEmail) ? 'disabled' : ''}
-              title="تفعيل الثلاث Privileged Intents لكل بوتات المكتبة">
-              <span class="ts-drawn-icon bolt" aria-hidden="true"><i></i></span> iNTeNT ALl
+              title="تفعيل Intents للجميع">
+              <span class="ts-drawn-icon bolt" aria-hidden="true"><i></i></span> Intents للجميع
             </button>
             <button class="ts-btn${(this.pfp?.avatar || this.pfp?.banner) ? ' mint' : ''}" id="ts-lib-pfp-all"
               ${(!this.pfp?.avatar && !this.pfp?.banner) ? 'disabled' : ''}
@@ -2090,7 +2101,7 @@ export class TrueStudioManager {
             <div class="ts-invite-section-label">${ic.link} رابط الدعوة</div>
             <div class="ts-invite-perms-row">
               <label class="ts-invite-perms-label" for="ts-invite-perms">Permissions</label>
-              <input type="number" id="ts-invite-perms" class="ts-invite-perms-input" value="8" min="0" title="8 = Administrator | 0 = بدون صلاحيات">
+              <input type="number" id="ts-invite-perms" class="ts-invite-perms-input" value="8" min="0" title="8 = Admin · 0 = بدون صلاحيات">
               <button class="ts-btn ts-btn-xs" id="ts-invite-regen" title="تحديث الرابط">${ic.reload}</button>
             </div>
             <div class="ts-invite-url-row">
@@ -2104,7 +2115,7 @@ export class TrueStudioManager {
 
           <div class="ts-invite-section">
             ${this.selectedEmail ? `
-              <div class="ts-invite-search-wrap">${ic.search}<input type="text" id="ts-invite-guild-search" class="ts-invite-search" placeholder="ابحث عن سيرفر…"></div>
+              <div class="ts-invite-search-wrap">${ic.search}<input type="text" id="ts-invite-guild-search" class="ts-invite-search" placeholder="ابحث…"></div>
               <div class="ts-invite-guild-list" id="ts-invite-guild-list">
                 <div class="ts-invite-guild-loading">${ic.spin} جاري التحميل…</div>
               </div>
@@ -2311,8 +2322,8 @@ export class TrueStudioManager {
           <div class="ts-bulk-top-row">
             <div class="ts-invite-perms-row">
               <label class="ts-invite-perms-label" for="ts-bulk-perms">Permissions</label>
-              <input type="number" id="ts-bulk-perms" class="ts-invite-perms-input" value="8" min="0" title="8=Admin | 0=None">
-              <button class="ts-btn ts-btn-xs" id="ts-bulk-regen" title="تحديث كل الروابط">${ic.reload} تحديث</button>
+              <input type="number" id="ts-bulk-perms" class="ts-invite-perms-input" value="8" min="0" title="8=Admin · 0=None">
+              <button class="ts-btn ts-btn-xs" id="ts-bulk-regen" title="تحديث الروابط">${ic.reload} تحديث</button>
             </div>
             <button class="ts-btn ts-btn-xs" id="ts-bulk-copy-all">${ic.copy} نسخ الكل</button>
           </div>
@@ -2337,7 +2348,7 @@ export class TrueStudioManager {
           ${this.selectedEmail ? `
             <!-- auto-add section -->
             <div class="ts-invite-divider"><span>إضافة تلقائية — كل البوتات للسيرفر المختار</span></div>
-            <div class="ts-invite-search-wrap">${ic.search}<input type="text" id="ts-bulk-guild-search" class="ts-invite-search" placeholder="ابحث عن سيرفر…"></div>
+            <div class="ts-invite-search-wrap">${ic.search}<input type="text" id="ts-bulk-guild-search" class="ts-invite-search" placeholder="ابحث…"></div>
             <div class="ts-invite-guild-list" id="ts-bulk-guild-list">
               <div class="ts-invite-guild-loading">${ic.spin} جاري تحميل السيرفرات…</div>
             </div>
@@ -2618,7 +2629,7 @@ export class TrueStudioManager {
     if (btn) { btn.disabled = true; }
 
     const prog = this._openBatchProgressModal(
-      `⚡ iNTeNT ALl`,
+      `Intents للجميع`,
       `${enabled ? 'تفعيل' : 'إيقاف'} Privileged Intents — الخادم يعالج كل البوتات`
     );
     prog.setIndeterminate(true);
