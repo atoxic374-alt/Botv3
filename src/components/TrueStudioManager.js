@@ -89,6 +89,7 @@ export class TrueStudioManager {
       await this._loadResumeInfo();
       this.openSSE();
       this._startCountdownTicker();
+      this._bindKeyboardShortcuts();
       this._inited = true;
     } else {
       await this.refresh();
@@ -98,6 +99,18 @@ export class TrueStudioManager {
     this.render();
     // If a captcha is already pending when this view opens, surface the modal.
     this._maybeOpenCaptchaModal();
+  }
+
+  _bindKeyboardShortcuts() {
+    if (this._keyboardBound) return;
+    this._keyboardBound = true;
+    document.addEventListener('keydown', (event) => {
+      const tag = event.target?.tagName?.toLowerCase();
+      if (['input', 'textarea', 'select'].includes(tag) || event.target?.isContentEditable) return;
+      if (event.key === 'Enter' && event.ctrlKey) { event.preventDefault(); this.startSession(); }
+      if (event.key.toLowerCase() === 'p' && event.ctrlKey && event.shiftKey) { event.preventDefault(); this.pauseSession(); }
+      if (event.key === 'Escape' && this._libModal) this._closeLibraryModal();
+    });
   }
 
   async _loadBrightDataSettings() {
