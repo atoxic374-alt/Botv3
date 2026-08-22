@@ -2535,11 +2535,11 @@ const ts = require('./lib/trueStudio');
       // Per-bot hard timeout — counts only "non-captcha" time.
       // Captcha solving (manual or automated) is paused from this counter so
       // a genuine captcha doesn't trigger a false timeout.
-      // Axios HTTP timeout = 32s, rate-limit back-off up to ~4×30s = 120s worst
-      // case, but _req retries have their own waits.  90s covers all normal
-      // operations (login, browse, createApplication, ensureBot, resetBotToken)
-      // without a captcha.
-      const BOT_CREATION_TIMEOUT_MS = 90_000;
+       // Axios HTTP timeout = 32s, rate-limit back-off up to ~4×30s = 120s worst
+       // case, but _req retries have their own waits.  500s gives slower
+       // operations (login, browse, createApplication, ensureBot, resetBotToken)
+       // enough time to complete without a captcha.
+       const BOT_CREATION_TIMEOUT_MS = 500_000;
 
       // ── Account-switching pool ───────────────────────────────────────────
       // Tracks the currently active TS account email (may change on rate limit).
