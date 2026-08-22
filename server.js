@@ -3065,6 +3065,12 @@ const ts = require('./lib/trueStudio');
               const msg = err?.message || String(err);
               s.failed += 1;
               tsLog('error', 'فشل ' + slot.name + ': ' + msg);
+               // A stop request must not trigger account switching, cooldowns,
+               // or expensive retries after the user asked to end the session.
+               if (s.cancelRequested) {
+                 tsLog('warn', 'تم إلغاء إعادة المحاولة لـ ' + slot.name + ' بناءً على طلب الإيقاف');
+                 continue;
+               }
 
               // ── Classify the error ───────────────────────────────────────────
               // Hard block (60003): Discord blocks the specific operation without

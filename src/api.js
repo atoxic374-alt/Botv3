@@ -44,7 +44,21 @@ async function apiCall(method, url, body) {
   const ctype = (res.headers?.get?.('content-type') || '').toLowerCase();
   const text = await res.text();
   if (ctype.includes('application/json') || /^[\s\uFEFF]*[{[]/.test(text)) {
-    try { return JSON.parse(text); } catch (_) {}
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      data = null;
+    }
+    if (data) {
+      // The API uses a JSON success flag even for validation and business
+      // errors. Treat those responses as rejected promises so every button
+      // follows the same failure path instead of showing false success.
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.error || `Server returned ${res.status}`);
+      }
+      return data;
+    }
   }
 
   const snippet = (text || '').replace(/\s+/g, ' ').slice(0, 140).trim();

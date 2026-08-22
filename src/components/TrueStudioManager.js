@@ -526,8 +526,10 @@ export class TrueStudioManager {
 
         <!-- Action buttons -->
         <div class="ts-actions">
-          <button class="ts-btn danger big" id="ts-stop">${t('ts.stop')}</button>
-          <button class="ts-btn mint big" id="ts-start">${t('ts.start_session')}</button>
+          <button class="ts-btn danger big" id="ts-stop"
+            ${!['running', 'waiting'].includes(s.state) ? 'disabled' : ''}>${t('ts.stop')}</button>
+          <button class="ts-btn mint big" id="ts-start"
+            ${['running', 'waiting'].includes(s.state) || this._sessionStartInFlight ? 'disabled' : ''}>${t('ts.start_session')}</button>
         </div>
 
         <!-- Live log -->
@@ -3992,6 +3994,7 @@ export class TrueStudioManager {
   }
 
   async startSession() {
+    if (this._sessionStartInFlight) return;
     if (!this.selectedEmail) {
       showNotification(t('ts.pick_account_first'), 'error');
       return;
@@ -4001,6 +4004,8 @@ export class TrueStudioManager {
       showNotification(t('ts.pick_at_least_one_rule'), 'error');
       return;
     }
+    this._sessionStartInFlight = true;
+    this.render();
     try {
       await window.electronAPI.tsStart({
         email: this.selectedEmail,
@@ -4021,10 +4026,16 @@ export class TrueStudioManager {
       this._renderLive();
     } catch (e) {
       showNotification(e.message || 'Start failed', 'error');
+    } finally {
+      this._sessionStartInFlight = false;
+      await this.refresh();
+      this.render();
     }
   }
 
   async stopSession() {
+    if (this._sessionStopInFlight) return;
+    this._sessionStopInFlight = true;
     try {
       await window.electronAPI.tsStop();
       showNotification(t('ts.session_stopping'), 'warn');
@@ -4032,6 +4043,10 @@ export class TrueStudioManager {
       this._renderLive();
     } catch (e) {
       showNotification(e.message || 'Stop failed', 'error');
+    } finally {
+      this._sessionStopInFlight = false;
+      await this.refresh();
+      this.render();
     }
   }
 
