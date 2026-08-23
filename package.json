@@ -4,6 +4,11 @@
   "version": "1.0.0",
   "description": "Bot-Studio web interface and automation server.",
   "main": "server.js",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=22 <23",
+    "pnpm": ">=11.21.0 <12"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
