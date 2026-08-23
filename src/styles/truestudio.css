@@ -3873,3 +3873,45 @@ body.light-theme .ts-category .ts-select {
 body.light-theme .ts-category .ts-input::placeholder { color: #79918d; }
 body.light-theme .ts-category .ts-method-collapsible { background: rgba(11,128,104,.035); }
 body.light-theme .ts-category .ts-toggle { border-color: rgba(22,67,60,.24); }
+
+
+/* ── Compact identity controls ───────────────────────────────────────────── */
+.ts-category-grid-assets > div { align-self: start; min-width: 0; }
+.ts-category-grid-assets > div > .ts-card { width: 100%; }
+.ts-category .ts-pfp-card { padding: 0 !important; }
+.ts-category .ts-pfp-card > .ts-pfp-head { margin: 0; padding: 13px 15px 10px; }
+.ts-category .ts-pfp-card .ts-pfp-subtitle { margin-top: 3px; font-size: 10px; }
+.ts-pfp-options { border-top: 1px solid var(--ts-stroke); }
+.ts-pfp-options-summary { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 15px; cursor: pointer; list-style: none; color: var(--ts-text); }
+.ts-pfp-options-summary::-webkit-details-marker { display: none; }
+.ts-pfp-options-title { font-size: 11px; font-weight: 800; }
+.ts-pfp-options-meta { color: var(--ts-muted); font-size: 10px; }
+.ts-pfp-options-summary .ts-collapse-arrow { margin-inline-start: auto; }
+.ts-pfp-options-body { padding: 0 15px 12px; }
+.ts-pfp-options-body .ts-pfp-upload-grid { gap: 8px; }
+.ts-pfp-options-body .ts-pfp-drop { min-height: 72px; padding: 8px; }
+.ts-pfp-options-body .ts-pfp-drop-icon { font-size: 21px; }
+.ts-pfp-options-body .ts-pfp-drop-title { font-size: 11px; }
+.ts-pfp-options-body .ts-pfp-drop-hint { font-size: 9px; }
+.ts-pfp-options-body .ts-pfp-actions { margin-top: 9px; gap: 6px; }
+.ts-pfp-options-body .ts-pfp-actions .ts-btn { padding: 7px 9px; font-size: 11px; }
+.ts-pfp-options-body .ts-pfp-save-hint { margin-inline-start: auto; font-size: 9px; }
+.ts-category .ts-pfp-card > .ts-auto-intents-row { margin: 9px 15px 13px; padding: 8px 10px; }
+.ts-category .ts-pfp-card > .ts-auto-intents-row .ts-auto-intents-label { font-size: 11px; }
+.ts-category .ts-pfp-card > .ts-auto-intents-row #ts-auto-intents-btn { min-width: 50px; padding: 7px 9px; }
+body.light-theme .ts-pfp-options { border-top-color: rgba(22,67,60,.12); }
+body.light-theme .ts-pfp-options-summary { color: #16322d; }
+@media (max-width: 640px) {
+  .ts-pfp-options-body .ts-pfp-upload-grid { grid-template-columns: 1fr 1fr; }
+  .ts-pfp-options-body .ts-pfp-save-hint { width: 100%; margin-inline-start: 0; }
+}
+
+
+body.light-theme .ts-category .ts-pfp-card {
+  background: linear-gradient(155deg, rgba(255,255,255,.98), rgba(242,249,247,.98)) !important;
+  border-color: rgba(11,128,104,.18) !important;
+}
+body.light-theme .ts-category .ts-pfp-card .ts-pfp-drop-title,
+body.light-theme .ts-category .ts-pfp-card .ts-pfp-options-title { color: #16322d; }
+body.light-theme .ts-category .ts-pfp-card .ts-pfp-drop-hint,
+body.light-theme .ts-category .ts-pfp-card .ts-pfp-options-meta { color: #5d7773; }

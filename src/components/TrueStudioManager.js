@@ -688,25 +688,34 @@ export class TrueStudioManager {
             <div class="ts-pfp-chip"><span class="ts-drawn-icon shield" aria-hidden="true"><i></i></span> محفوظ</div>
           </div>
         </div>
-        <div class="ts-pfp-upload-grid">
-          <label class="ts-pfp-drop">
-            <span class="ts-pfp-drop-icon avatar" aria-hidden="true"><i></i></span>
-            <span class="ts-pfp-drop-title">صورة البوت</span>
-            <span class="ts-pfp-drop-hint">PNG · JPG · GIF · WebP</span>
-            <input type="file" id="ts-pfp-avatar" accept="image/png,image/jpeg,image/gif,image/webp" />
-          </label>
-          <label class="ts-pfp-drop banner">
-            <span class="ts-pfp-drop-icon banner" aria-hidden="true"><i></i></span>
-            <span class="ts-pfp-drop-title">بنر البوت</span>
-            <span class="ts-pfp-drop-hint">يفضل صورة عريضة</span>
-            <input type="file" id="ts-pfp-banner" accept="image/png,image/jpeg,image/gif,image/webp" />
-          </label>
-        </div>
-        <div class="ts-pfp-actions">
-          <button class="ts-btn ts-pfp-clear" id="ts-pfp-clear"><span class="ts-drawn-icon broom" aria-hidden="true"><i></i></span> مسح الهوية</button>
-          <button class="ts-btn mint ts-pfp-save" id="ts-pfp-save"><span class="ts-drawn-icon save" aria-hidden="true"><i></i></span> حفظ الهوية</button>
-          <span class="ts-field-hint ts-pfp-save-hint"><span class="ts-drawn-icon clock" aria-hidden="true"><i></i></span> آخر حفظ: ${escapeHtml(stamp)}</span>
-        </div>
+        <details class="ts-pfp-options">
+          <summary class="ts-pfp-options-summary">
+            <span class="ts-pfp-options-title">إدارة الصور</span>
+            <span class="ts-pfp-options-meta">${hasSaved ? 'هوية محفوظة' : 'اختياري'}</span>
+            <span class="ts-collapse-arrow"></span>
+          </summary>
+          <div class="ts-pfp-options-body">
+            <div class="ts-pfp-upload-grid">
+              <label class="ts-pfp-drop">
+                <span class="ts-pfp-drop-icon avatar" aria-hidden="true"><i></i></span>
+                <span class="ts-pfp-drop-title">صورة البوت</span>
+                <span class="ts-pfp-drop-hint">PNG · JPG · GIF · WebP</span>
+                <input type="file" id="ts-pfp-avatar" accept="image/png,image/jpeg,image/gif,image/webp" />
+              </label>
+              <label class="ts-pfp-drop banner">
+                <span class="ts-pfp-drop-icon banner" aria-hidden="true"><i></i></span>
+                <span class="ts-pfp-drop-title">بنر البوت</span>
+                <span class="ts-pfp-drop-hint">يفضل صورة عريضة</span>
+                <input type="file" id="ts-pfp-banner" accept="image/png,image/jpeg,image/gif,image/webp" />
+              </label>
+            </div>
+            <div class="ts-pfp-actions">
+              <button class="ts-btn ts-pfp-clear" id="ts-pfp-clear"><span class="ts-drawn-icon broom" aria-hidden="true"><i></i></span> مسح الهوية</button>
+              <button class="ts-btn mint ts-pfp-save" id="ts-pfp-save"><span class="ts-drawn-icon save" aria-hidden="true"><i></i></span> حفظ الهوية</button>
+              <span class="ts-field-hint ts-pfp-save-hint"><span class="ts-drawn-icon clock" aria-hidden="true"><i></i></span> آخر حفظ: ${escapeHtml(stamp)}</span>
+            </div>
+          </div>
+        </details>
         <div class="ts-auto-intents-row">
           <span class="ts-auto-intents-label">
             ${icon('bolt', 'ts-inline-icon')}
