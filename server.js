@@ -46,6 +46,7 @@ app.get('/favicon.ico', (req, res) => res.type('image/svg+xml').send(DEFAULT_AVA
 app.get('/login', (req, res) => res.redirect('/'));
 app.get('/signup', (req, res) => res.redirect('/'));
 app.get('/api/build-stamp', (req, res) => res.json({ stamp: BUILD_STAMP }));
+app.get('/api/healthz', (req, res) => res.status(200).json({ status: 'ok', service: 'botv3' }));
 
 function serveIndex(res) {
   try {

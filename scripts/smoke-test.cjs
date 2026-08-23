@@ -11,6 +11,10 @@ async function json(path, options) {
 }
 
 (async () => {
+  const health = await json('/api/healthz');
+  assert.equal(health.res.status, 200, 'healthz should be reachable');
+  assert.deepEqual(health.body, { status: 'ok', service: 'botv3' }, 'healthz should identify Botv3');
+
   const state = await json('/api/ts/state');
   assert.equal(state.res.status, 200, 'state should be reachable');
   assert.equal(state.body?.success, true, 'state should succeed');
