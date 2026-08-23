@@ -125,7 +125,8 @@ window.electronAPI = {
   tsCreateTeam: (email, name, count = 1) => apiCall('POST', '/api/ts/teams/create', { email, name, count }),
   tsAddAppToTeam: (email, appId, teamId) =>
     apiCall('POST', `/api/ts/teams/${encodeURIComponent(teamId)}/add-app`, { email, appId }),
-  tsResetAllStart: (email, bots) => apiCall('POST', '/api/ts/reset-all/start', { email, bots }),
+  tsResetAllStart: (email, bots, selectionActive = false) =>
+    apiCall('POST', '/api/ts/reset-all/start', { email, bots, selectionActive }),
   tsResetAllState: () => apiCall('GET', '/api/ts/reset-all/state'),
   tsResetAllStop: () => apiCall('POST', '/api/ts/reset-all/stop'),
   tsBotInviteGuilds: (email) => apiCall('GET', `/api/ts/bot-invite-guilds?email=${encodeURIComponent(email)}`),

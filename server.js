@@ -1365,14 +1365,25 @@ const ts = require('./lib/trueStudio');
   });
 
   // Bulk library operations must not run against a partial team/application view.
-  // Re-load empty teams through the team endpoint and fail closed on any error.
-  async function loadCompleteTsApplicationLibrary({ token, netOpts = {} }) {
+  // A selected scope may proceed only when its known app/team records are verified;
+  // an unscoped operation still fails closed on any team-list error.
+  async function loadCompleteTsApplicationLibrary({ token, netOpts = {}, allowedAppIds = null }) {
+    const scopedIds = allowedAppIds instanceof Set
+      ? new Set([...allowedAppIds].map(String))
+      : (Array.isArray(allowedAppIds) ? new Set(allowedAppIds.map(String)) : null);
     const [teams, apps] = await Promise.all([
       ts.listTeams({ token, netOpts }),
       ts.listApplications({ token, netOpts }),
     ]);
     const allApps = Array.isArray(apps) ? apps.slice() : [];
     const seenApps = new Set(allApps.map(a => String(a?.id || '')).filter(Boolean));
+    const selectedTeamIds = new Set(
+      allApps
+        .filter(a => scopedIds?.has(String(a?.id || '')))
+        .map(a => a?.team?.id || a?.team_id)
+        .filter(Boolean)
+        .map(String)
+    );
     const teamErrors = [];
     for (const team of teams || []) {
       try {
@@ -1385,12 +1396,15 @@ const ts = require('./lib/trueStudio');
           }
         }
       } catch (error) {
-        teamErrors.push({
+        const detail = {
           teamId: team.id,
           code: error?.code || 'TEAM_APPS_FAILED',
           status: error?.status || 0,
           message: error?.message || String(error),
-        });
+        };
+        // An explicit scope can ignore an unrelated team; a selected app whose
+        // team is known, and an unscoped "all" operation, remain fail-closed.
+        if (!scopedIds || selectedTeamIds.has(String(team.id))) teamErrors.push(detail);
       }
     }
     if (teamErrors.length) {
@@ -1437,7 +1451,9 @@ const ts = require('./lib/trueStudio');
         const health = await ts.accountHealthProbe({ token, netOpts });
         if (!health.ready) throw new Error('Account is not ready: ' + health.message);
 
-        const { apps: libApps } = await loadCompleteTsApplicationLibrary({ token, netOpts });
+        const { apps: libApps } = await loadCompleteTsApplicationLibrary({
+          token, netOpts, allowedAppIds: selectedIds.size ? selectedIds : null,
+        });
         const bots = libApps.filter(a => a && a.bot && a.id && (!selectedIds.size || selectedIds.has(String(a.id))));
         if (!bots.length) throw new Error(selectedIds.size ? 'لا توجد بوتات محددة قابلة للتنفيذ' : 'لا توجد بوتات في المكتبة');
 
@@ -1566,7 +1582,9 @@ const ts = require('./lib/trueStudio');
         const netOpts = { client, solveCaptcha: buildSolveCaptcha(), rateLimiter, captchaContext: 'intents-apply-all' };
         const health = await ts.accountHealthProbe({ token, netOpts });
         if (!health.ready) throw new Error('Account readiness blocked bulk intent update: ' + health.message);
-        const { apps: libApps } = await loadCompleteTsApplicationLibrary({ token, netOpts });
+        const { apps: libApps } = await loadCompleteTsApplicationLibrary({
+          token, netOpts, allowedAppIds: selectedIds.size ? selectedIds : null,
+        });
         const bots = libApps.filter(a => a && a.bot && a.id && (!selectedIds.size || selectedIds.has(String(a.id))));
         const results = [];
         for (let i = 0; i < bots.length; i++) {
@@ -2017,7 +2035,7 @@ const ts = require('./lib/trueStudio');
       const currentUserId = me?.id || null;
 
       // Helper to map a raw Discord application object to our card shape
-      function toCard(a) {
+      function toCard(a, teamId = null) {
         return {
           id: a.id,
           name: a.name,
@@ -2025,6 +2043,7 @@ const ts = require('./lib/trueStudio');
           isBot: !!a.bot,
           botId: a.bot?.id || null,
           botUsername: a.bot?.username || null,
+          teamId: teamId || a.team?.id || a.team_id || null,
           createdAt: snowflakeToTs(a.id),
         };
       }
@@ -2060,7 +2079,7 @@ const ts = require('./lib/trueStudio');
         const card = toCard(a);
         const tid = a.team?.id || a.team_id || null;
         if (tid && teamMap.has(tid)) {
-          teamMap.get(tid).apps.push(card);
+          teamMap.get(tid).apps.push({ ...card, teamId: tid });
         } else if (tid && !teamMap.has(tid)) {
           // App references a team not in /teams — synthesize the team entry
           teamMap.set(tid, {
@@ -2112,7 +2131,7 @@ const ts = require('./lib/trueStudio');
           const entry = teamMap.get(tid);
           if (!entry) continue;
           for (const a of list) {
-            entry.apps.push(toCard(a));
+            entry.apps.push(toCard(a, tid));
           }
           entry.appsFromTeamEndpoint = true;
         }
@@ -2124,14 +2143,17 @@ const ts = require('./lib/trueStudio');
         appLimit: TEAM_APP_LIMIT,
         apps: t.apps.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
       }));
+      const personalOut = personal.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const loadedAppCount = teamsOut.reduce((sum, team) => sum + team.apps.length, 0) + personalOut.length;
 
       ok(res, {
         teams: teamsOut,
-        personal: personal.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+        personal: personalOut,
         currentUserId,
         complete: teamLoadErrors.length === 0,
         warnings: teamLoadErrors,
-        totals: { teams: teamsOut.length, apps: apps.length, personalApps: personal.length },
+        affectedTeamIds: teamLoadErrors.map(w => w.teamId).filter(Boolean),
+        totals: { teams: teamsOut.length, apps: loadedAppCount, personalApps: personalOut.length },
       });
     } catch (e) {
       fail(res, e);
@@ -2678,6 +2700,7 @@ const ts = require('./lib/trueStudio');
 
   app.post('/api/ts/reset-all/start', async (req, res) => {
     const email = String(req.body?.email || '').toLowerCase().trim();
+    const selectionActive = req.body?.selectionActive === true;
     const rawBots = Array.isArray(req.body?.bots) ? req.body.bots : [];
     const bots = rawBots.map(bot => ({
       id: String(bot?.id || '').trim(),
@@ -2718,7 +2741,11 @@ const ts = require('./lib/trueStudio');
             await ts.humanDelay(600, 1200);
             await ts.loadDevPortal({ client, token, netOpts });
           }
-          const { apps: verifiedLibraryApps } = await loadCompleteTsApplicationLibrary({ token, netOpts });
+          const { apps: verifiedLibraryApps } = await loadCompleteTsApplicationLibrary({
+            token,
+            netOpts,
+            allowedAppIds: selectionActive ? new Set(bots.map(bot => bot.id)) : null,
+          });
           const verifiedBotIds = new Set(verifiedLibraryApps.filter(app => app?.bot?.id || app?.bot).map(app => String(app.id || '')));
           const missingBots = bots.filter(bot => !verifiedBotIds.has(bot.id));
           if (missingBots.length) {

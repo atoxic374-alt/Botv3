@@ -4476,3 +4476,216 @@ body.light-theme .ts-team-2fa-lock { color: #9a6500; }
   .ts-team-create-fields { padding: 8px; }
   .ts-team-create-fields .ts-form-grid { grid-template-columns: 1fr; }
 }
+
+
+/* ── Library consistency pass ─────────────────────────────────────────────
+   One compact action language for the library. Selection is deliberately
+   visible on the whole card, not only on the native checkbox. */
+.ts-lib-head-actions .ts-lib-action {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+  justify-content: center;
+}
+.ts-lib-head-actions .ts-lib-action .ts-inline-icon,
+.ts-lib-head-actions .ts-lib-action .ts-drawn-icon {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+}
+.ts-lib-head-actions .ts-lib-action:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+.ts-lib-head-actions .ts-stop-action {
+  color: #ffd1d6;
+  border-color: rgba(255,90,110,.35);
+  background: rgba(255,90,110,.12);
+}
+.ts-lib-head-actions .ts-stop-action:hover:not(:disabled) {
+  background: rgba(255,90,110,.20);
+}
+
+.ts-app-card {
+  isolation: isolate;
+  overflow: visible;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .12s ease;
+}
+.ts-app-card.selected {
+  border-color: rgba(124,224,196,.82);
+  background: linear-gradient(145deg, rgba(124,224,196,.14), rgba(88,101,242,.08) 58%, var(--ts-card-2));
+  box-shadow: 0 0 0 1px rgba(124,224,196,.22), 0 10px 24px rgba(45,212,191,.14), inset 0 1px 0 rgba(255,255,255,.10);
+  transform: translateY(-2px);
+}
+.ts-app-card.selected::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 14px;
+  pointer-events: none;
+  box-shadow: 0 0 22px rgba(124,224,196,.18);
+}
+.ts-app-card.selected .ts-app-thumb {
+  border-color: rgba(124,224,196,.75);
+  box-shadow: 0 0 0 3px rgba(124,224,196,.12), 0 0 18px rgba(124,224,196,.18);
+}
+.ts-app-card.selected .ts-card-tag {
+  background: rgba(124,224,196,.24);
+  color: #d9fff4;
+}
+.ts-app-select {
+  width: 25px;
+  height: 25px;
+  top: 7px;
+  inset-inline-end: 7px;
+  border-color: rgba(255,255,255,.16);
+  background: rgba(8,12,20,.92);
+  box-shadow: 0 5px 12px rgba(0,0,0,.16);
+}
+.ts-app-select:hover { border-color: rgba(124,224,196,.62); }
+.ts-app-select input:focus-visible + span {
+  outline: 2px solid var(--ts-mint);
+  outline-offset: 2px;
+}
+.ts-app-select span {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  border-color: #a6afc1;
+  background: rgba(255,255,255,.03);
+}
+.ts-app-select input:checked + span {
+  background: var(--ts-mint);
+  border-color: var(--ts-mint);
+  box-shadow: inset 0 0 0 2px #0d111c, 0 0 0 3px rgba(124,224,196,.12);
+}
+.ts-app-select input:checked + span::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 8px;
+  left: 3px;
+  top: 0px;
+  border-right: 2px solid #0d111c;
+  border-bottom: 2px solid #0d111c;
+  transform: rotate(42deg);
+}
+
+/* All card actions share the same footprint; color only communicates intent. */
+.ts-app-card .ts-card-action {
+  width: 100%;
+  min-height: 28px;
+  margin-top: 3px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .15px;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, color .14s ease, transform .12s ease;
+}
+.ts-app-card .ts-card-action:hover:not(:disabled) { transform: translateY(-1px); }
+.ts-app-card .ts-card-action:active:not(:disabled) { transform: translateY(0) scale(.98); }
+.ts-app-card .ts-card-reset,
+.ts-app-card .ts-card-move-team {
+  background: rgba(124,224,196,.08);
+  border: 1px solid rgba(124,224,196,.24);
+  color: var(--ts-mint);
+}
+.ts-app-card .ts-card-reset:hover:not(:disabled),
+.ts-app-card .ts-card-move-team:hover:not(:disabled) {
+  background: rgba(124,224,196,.18);
+  border-color: rgba(124,224,196,.52);
+}
+.ts-app-card .ts-card-intents,
+.ts-app-card .ts-card-invite {
+  background: rgba(88,101,242,.10);
+  border: 1px solid rgba(88,101,242,.28);
+  color: #d7dcff;
+}
+.ts-app-card .ts-card-intents:hover:not(:disabled),
+.ts-app-card .ts-card-invite:hover:not(:disabled) {
+  background: rgba(88,101,242,.22);
+  border-color: rgba(124,224,196,.52);
+  color: #eff1ff;
+}
+.ts-app-card .ts-card-intents.intents-on {
+  background: rgba(124,224,196,.12);
+  border-color: rgba(124,224,196,.38);
+  color: #d9fff4;
+}
+.ts-app-card .ts-card-action .ic,
+.ts-app-card .ts-card-action .ts-inline-icon {
+  width: 13px;
+  height: 13px;
+  min-width: 13px;
+}
+.ts-card-reset-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ts-team.is-affected {
+  border-color: rgba(240,178,50,.34);
+  background: linear-gradient(180deg, rgba(240,178,50,.045), transparent 70%);
+}
+.ts-team-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: -3px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(240,178,50,.24);
+  border-radius: 9px;
+  background: rgba(240,178,50,.08);
+  color: #f6cb78;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.ts-team-warning .ts-inline-icon { flex: 0 0 auto; margin-top: 1px; }
+.ts-lib-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 8px 0 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(240,178,50,.26);
+  border-radius: 10px;
+  background: rgba(240,178,50,.08);
+  color: #f6cb78;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ts-lib-warning .ts-inline-icon { flex: 0 0 auto; margin-top: 1px; }
+
+@media (max-width: 720px) {
+  .ts-lib-page-head { align-items: flex-start; flex-wrap: wrap; }
+  .ts-lib-page-title { padding-top: 8px; }
+  .ts-lib-head-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .ts-lib-head-actions .ts-lib-action { min-width: 0; padding-inline: 6px; }
+}
+@media (max-width: 430px) {
+  .ts-lib-page-body { padding: 11px; }
+  .ts-lib-head-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ts-lib-head-actions .ts-lib-action { min-height: 36px; }
+  .ts-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ts-app-card { padding-inline: 8px; }
+  .ts-app-card .ts-card-action { font-size: 9.5px; padding-inline: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ts-app-card,
+  .ts-app-card.selected,
+  .ts-app-card .ts-card-action { transition: none; transform: none; }
+}

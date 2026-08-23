@@ -76,6 +76,7 @@ export class TrueStudioManager {
     this._dryRunResult = null;
     this._libraryQuery = '';
     this._selectedLibraryApps = new Set();
+    this._libraryAffectedTeamIds = new Set();
     this._resumeInfo = null;
     this.pfp = { avatar: null, banner: null, updatedAt: 0 };
     this.bulkTokensText = '';         // raw textarea content for bulk token import
@@ -902,10 +903,12 @@ export class TrueStudioManager {
   }
 
   async _applyPfpAll() {
+    if (!this.selectedEmail) { showNotification('اختر حساباً أولاً', 'error'); return; }
+    const bulk = this._libraryBulkState();
+    if (!bulk.allowed) { showNotification(bulk.reason || 'حدّث المكتبة أولاً', 'warn'); return; }
     if (!this.pfp?.avatar && !this.pfp?.banner) { showNotification('احفظ صورة أو بنر أولاً', 'error'); return; }
     if (this._pfpAllRunning) { showNotification('تطبيق الهوية جاري التنفيذ بالفعل…', 'info'); return; }
-    if (!this.selectedEmail) { showNotification('اختر حساباً أولاً', 'error'); return; }
-    const selectedIds = this._selectedAppIds();
+    const selectedIds = bulk.selectedIds;
     const scopeLabel = selectedIds.length ? `${selectedIds.length} بوت محدد` : 'كل بوتات المكتبة';
     const confirmed = await showConfirm(`تطبيق الهوية على ${scopeLabel}؟\n(يُحدَّث البوت + أيقونة/بنر التطبيق في المكتبة)`, { confirmText: 'تطبيق الهوية', cancelText: 'إلغاء' });
     if (!confirmed) return;
@@ -1994,34 +1997,34 @@ export class TrueStudioManager {
           <button class="ts-lib-back" id="ts-lib-close" aria-label="back">${icon('back', 'ts-inline-icon')}</button>
           <div class="ts-lib-page-title">${t('ts.lib_btn_title') || 'فتح المكتبة'}</div>
           <div class="ts-lib-head-actions">
-            <button class="ts-btn ts-intents-all-btn" id="ts-lib-intents-all"
+            <button class="ts-btn ts-lib-action ts-intents-all-btn" id="ts-lib-intents-all"
               ${(!this.selectedEmail || !libraryReady) ? 'disabled' : ''}
-              title="${escapeAttr(libraryReady ? 'تفعيل Intents للجميع' : libraryBlockedTitle)}">
-              <span class="ts-drawn-icon bolt" aria-hidden="true"><i></i></span> Intents للجميع
+              title="${escapeAttr(libraryReady ? 'تفعيل Intents للبوتات المحددة أو الكل' : libraryBlockedTitle)}">
+              <span class="ts-drawn-icon bolt" aria-hidden="true"><i></i></span><span>Intents</span>
             </button>
-            <button class="ts-btn${(this.pfp?.avatar || this.pfp?.banner) ? ' mint' : ''}" id="ts-lib-pfp-all"
+            <button class="ts-btn ts-lib-action${(this.pfp?.avatar || this.pfp?.banner) ? ' mint' : ''}" id="ts-lib-pfp-all"
               ${(!libraryReady || (!this.pfp?.avatar && !this.pfp?.banner)) ? 'disabled' : ''}
-              title="${escapeAttr(!libraryReady ? libraryBlockedTitle : ((this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً'))}">
-              <span class="ts-drawn-icon image" aria-hidden="true"><i></i></span> تطبيق الهوية
+              title="${escapeAttr(!libraryReady ? libraryBlockedTitle : ((this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على البوتات المحددة أو الكل' : 'احفظ صورة أو بنر أولاً'))}">
+              <span class="ts-drawn-icon image" aria-hidden="true"><i></i></span><span>الهوية</span>
             </button>
-            <button class="ts-btn" id="ts-lib-bulk-invite"
+            <button class="ts-btn ts-lib-action" id="ts-lib-bulk-invite"
               ${(!libraryReady || !this.selectedEmail) ? 'disabled' : ''}
-              title="${escapeAttr(libraryReady ? 'إنشاء روابط الدعوة' : libraryBlockedTitle)}">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Bulk Invite
+              title="${escapeAttr(libraryReady ? 'إنشاء روابط دعوة للبوتات المحددة أو الكل' : libraryBlockedTitle)}">
+              ${icon('link', 'ts-inline-icon')}<span>دعوة</span>
             </button>
-            <button class="ts-btn ts-reset-all-btn" id="ts-lib-reset-all"
+            <button class="ts-btn ts-lib-action ts-reset-all-btn" id="ts-lib-reset-all"
               ${(!libraryReady || this._resetAllInFlight) ? 'disabled' : ''}
-              title="${escapeAttr(libraryReady ? t('ts.reset_all_title') : libraryBlockedTitle)}"
+              title="${escapeAttr(libraryReady ? (t('ts.reset_all_title') || 'إعادة تعيين توكنات البوتات المحددة أو الكل') : libraryBlockedTitle)}"
               style="${this._resetAllInFlight ? 'display:none' : ''}">
-              ${icon('refresh', 'ts-inline-icon')} Reset All
+              ${icon('refresh', 'ts-inline-icon')}<span>إعادة ضبط</span>
             </button>
-            <button class="ts-btn ts-stop-btn" id="ts-lib-stop-all"
+            <button class="ts-btn ts-lib-action ts-stop-action" id="ts-lib-stop-all"
               title="${escapeAttr(t('ts.stop_reset_all_title'))}"
               style="${this._resetAllInFlight ? '' : 'display:none'}">
-              ${icon('stop', 'ts-inline-icon')} Stop
+              ${icon('stop', 'ts-inline-icon')}<span>إيقاف</span>
             </button>
-            <button class="ts-btn" id="ts-lib-refresh-modal" ${this.libraryLoading || !this.selectedEmail ? 'disabled' : ''}>
-              ${this.libraryLoading ? (t('ts.testing') || '...') : (t('ts.lib_refresh') || 'تحديث')}
+            <button class="ts-btn ts-lib-action" id="ts-lib-refresh-modal" ${this.libraryLoading || !this.selectedEmail ? 'disabled' : ''}>
+              ${icon('refresh', 'ts-inline-icon')}<span>${this.libraryLoading ? (t('ts.testing') || '...') : (t('ts.lib_refresh') || 'تحديث')}</span>
             </button>
           </div>
         </header>
@@ -2083,6 +2086,7 @@ export class TrueStudioManager {
     if (!this._libModal) return;
     const body = this._libModal.querySelector('#ts-lib-page-body');
     if (!body) return;
+    this._syncLibraryBulkButtons();
     const tab = this._libCurrentTab || 'teams';
     if (tab === 'created') {
       body.innerHTML = this._renderCreatedBotsTab();
@@ -2114,8 +2118,9 @@ export class TrueStudioManager {
     }
     if (tab === 'teams') {
       const query = (this._libraryQuery || '').trim().toLowerCase();
+      const affectedTeamIds = new Set([...(this._libraryAffectedTeamIds || [])].map(String));
       const libraryWarning = this.library?.complete === false
-        ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} تعذر تحميل بعض تطبيقات التيمات. التيم الفارغ قد لا يعني أنه بلا تطبيقات. ${escapeHtml((this.library.warnings || [])[0]?.message || '')}</div>`
+        ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} تعذر تحميل بيانات ${affectedTeamIds.size || 'بعض'} تيم. راجع البطاقات المعلّمة قبل العملية الجماعية.</div>`
         : '';
       const allTeams = this.library.teams || [];
       const teams = allTeams.map(team => ({ ...team, apps: (team.apps || []).filter(a => !query || `${a.name || ''} ${a.id || ''}`.toLowerCase().includes(query)) })).filter(team => !query || team.apps.length);
@@ -2139,14 +2144,17 @@ export class TrueStudioManager {
         ${teams.map(team => {
           const roleBadge = this._teamRoleBadge(team);
           return `
-            <div class="ts-team">
+            <div class="ts-team${affectedTeamIds.has(String(team.id)) ? ' is-affected' : ''}">
               <div class="ts-team-head">
                 <div class="ts-team-name">${escapeHtml(team.name)}${roleBadge}</div>
                 <div class="ts-team-badge">${team.apps.length}/${team.appLimit || 25}</div>
               </div>
+              ${affectedTeamIds.has(String(team.id))
+                ? `<div class="ts-team-warning">${icon('warning', 'ts-inline-icon')} تعذر قراءة تطبيقات هذا التيم. حدّث المكتبة قبل تنفيذ عملية عليه.</div>`
+                : ''}
               ${team.apps.length
                 ? `<div class="ts-cards">${team.apps.map(a => this._renderAppCard(a)).join('')}</div>`
-                : `<div class="ts-team-empty">${t('ts.lib_team_empty') || 'لا تطبيقات'}</div>`}
+                : `<div class="ts-team-empty">${affectedTeamIds.has(String(team.id)) ? 'بيانات التطبيقات غير مكتملة' : (t('ts.lib_team_empty') || 'لا تطبيقات')}</div>`}
             </div>
           `;
         }).join('')}
@@ -2160,8 +2168,9 @@ export class TrueStudioManager {
     }
     if (tab === 'personal') {
       const apps = this.library.personal || [];
+      const affectedTeamIds = new Set([...(this._libraryAffectedTeamIds || [])].map(String));
       const libraryWarning = this.library?.complete === false
-        ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} تعذر تحميل بعض بيانات المكتبة. راجع التيمات المتأثرة قبل تنفيذ عملية جماعية.</div>`
+        ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} بعض التيمات لم تكتمل بياناتها. اختر بوتات من التيمات المحمّلة فقط قبل العملية الجماعية.</div>`
         : '';
       const teams = this.library.teams || [];
       const query = (this._libraryQuery || '').trim().toLowerCase();
@@ -2179,11 +2188,13 @@ export class TrueStudioManager {
 
   _renderLibraryToolbar(apps = [], total = 0) {
     const selected = this._selectedLibraryApps.size;
-    const allSelected = apps.length > 0 && apps.every(a => this._selectedLibraryApps.has(String(a.id)));
+    const selectedVisible = apps.filter(a => this._selectedLibraryApps.has(String(a.id))).length;
+    const allSelected = apps.length > 0 && selectedVisible === apps.length;
+    const countLabel = selected ? `${selected} محدد` : `${total} عنصر`;
     return `<div class="ts-library-toolbar">
       <div class="ts-library-search"><span class="ts-drawn-icon search" aria-hidden="true"><i></i></span><input id="ts-lib-search" class="ts-input" type="search" value="${escapeAttr(this._libraryQuery)}" placeholder="بحث بالاسم أو App ID" autocomplete="off"></div>
       <label class="ts-select-all"><input type="checkbox" id="ts-lib-select-all" ${allSelected ? 'checked' : ''}> تحديد الظاهر</label>
-      <span class="ts-selected-count">${selected ? `${selected} محدد` : `${total} عنصر`}</span>
+      <span class="ts-selected-count" aria-live="polite">${countLabel}</span>
     </div>`;
   }
 
@@ -2202,33 +2213,83 @@ export class TrueStudioManager {
       input.addEventListener('change', () => {
         const id = String(input.value || '');
         if (input.checked) this._selectedLibraryApps.add(id); else this._selectedLibraryApps.delete(id);
+        const card = input.closest('.ts-app-card');
+        card?.classList.toggle('selected', input.checked);
         const count = root.querySelector('.ts-selected-count');
         if (count) count.textContent = this._selectedLibraryApps.size ? `${this._selectedLibraryApps.size} محدد` : 'لا يوجد تحديد';
+        this._syncLibraryBulkButtons();
+      });
+    });
+    root.querySelectorAll('.ts-app-card').forEach(card => {
+      card.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, label, input')) return;
+        const input = card.querySelector('[data-select-app]');
+        if (!input) return;
+        input.checked = !input.checked;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
       });
     });
   }
 
   _selectedAppIds() { return [...this._selectedLibraryApps].filter(Boolean); }
 
+  _libraryApps() {
+    return [
+      ...(this.library?.personal || []),
+      ...(this.library?.teams || []).flatMap(team => team.apps || []),
+    ];
+  }
+
+  _libraryBulkState() {
+    const selectedIds = this._selectedAppIds();
+    const appsById = new Map(this._libraryApps().map(app => [String(app.id), app]));
+    const affectedTeamIds = this._libraryAffectedTeamIds instanceof Set
+      ? this._libraryAffectedTeamIds
+      : new Set((this.library?.affectedTeamIds || []).map(String));
+    const affectedSelectedIds = selectedIds.filter(id => {
+      const teamId = appsById.get(String(id))?.teamId;
+      return teamId && affectedTeamIds.has(String(teamId));
+    });
+    const loaded = !!this.library && !this.libraryLoading && !this.libraryError;
+    const complete = loaded && this.library.complete !== false;
+    let reason = '';
+    if (!loaded) {
+      reason = this.libraryLoading ? 'انتظر اكتمال تحميل المكتبة' : 'حدّث المكتبة أولاً';
+    } else if (!complete && !selectedIds.length) {
+      reason = 'حدّد بوتات من التيمات المحمّلة بعد مراجعة التيمات المتأثرة';
+    } else if (affectedSelectedIds.length) {
+      reason = 'أزل البوتات التابعة لتيم متأثر أو حدّث المكتبة أولاً';
+    }
+    return {
+      loaded,
+      complete,
+      selectedIds,
+      affectedSelectedIds,
+      allowed: loaded && (complete || (selectedIds.length > 0 && affectedSelectedIds.length === 0)),
+      reason,
+    };
+  }
+
   _syncLibraryBulkButtons() {
     if (!this._libModal) return;
-    const ready = !!this.library && this.library.complete !== false;
+    const bulk = this._libraryBulkState();
     const emailReady = !!this.selectedEmail;
-    const blockedTitle = 'حدّث المكتبة وتأكد من اكتمال بيانات التيمات أولاً';
+    const ready = bulk.allowed && emailReady;
+    const blockedTitle = bulk.reason || 'حدّث المكتبة وتأكد من اكتمال بيانات التيمات أولاً';
     const setState = (id, disabled, title) => {
       const btn = this._libModal.querySelector(id);
       if (!btn) return;
       btn.disabled = !!disabled;
       if (title) btn.title = title;
     };
-    setState('#ts-lib-intents-all', !ready || !emailReady || this._intentsAllRunning, ready ? 'تفعيل Intents للجميع' : blockedTitle);
-    setState('#ts-lib-pfp-all', !ready || !emailReady || !(this.pfp?.avatar || this.pfp?.banner) || this._pfpAllRunning,
-      !ready ? blockedTitle : ((this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً'));
-    setState('#ts-lib-bulk-invite', !ready || !emailReady, ready ? 'إنشاء روابط الدعوة' : blockedTitle);
+    setState('#ts-lib-intents-all', !ready || this._intentsAllRunning, ready ? 'تفعيل Intents للبوتات المحددة أو الكل' : blockedTitle);
+    setState('#ts-lib-pfp-all', !ready || !(this.pfp?.avatar || this.pfp?.banner) || this._pfpAllRunning,
+      !ready ? blockedTitle : ((this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على البوتات المحددة أو الكل' : 'احفظ صورة أو بنر أولاً'));
+    setState('#ts-lib-bulk-invite', !ready, ready ? 'إنشاء روابط دعوة للبوتات المحددة أو الكل' : blockedTitle);
     const resetAllBtn = this._libModal.querySelector('#ts-lib-reset-all');
     if (resetAllBtn) {
-      resetAllBtn.disabled = !ready || !emailReady || this._resetAllInFlight;
-      resetAllBtn.title = ready ? (t('ts.reset_all_title') || 'إعادة تعيين توكنات جميع البوتات') : blockedTitle;
+      resetAllBtn.disabled = !ready || this._resetAllInFlight;
+      resetAllBtn.title = ready ? (t('ts.reset_all_title') || 'إعادة تعيين توكنات البوتات المحددة أو الكل') : blockedTitle;
       resetAllBtn.style.display = this._resetAllInFlight ? 'none' : '';
     }
     const stopAllBtn = this._libModal.querySelector('#ts-lib-stop-all');
@@ -2469,7 +2530,8 @@ export class TrueStudioManager {
      Bulk Invite — shows ALL bots in a table with links + bulk auto-add
      ═══════════════════════════════════════════════════════════════════ */
   _openBulkInviteModal() {
-    if (!this.library) { showNotification('افتح المكتبة أولاً', 'error'); return; }
+    const bulk = this._libraryBulkState();
+    if (!bulk.allowed) { showNotification(bulk.reason || 'حدّث المكتبة أولاً', 'warn'); return; }
     document.querySelector('.ts-bulk-invite-overlay')?.remove();
 
     const ic = this._invIcons();
@@ -2837,12 +2899,14 @@ export class TrueStudioManager {
 
   async _applyIntentsAll(enabled = true) {
     if (!this.selectedEmail) { showNotification(t('ts.pick_account_first'), 'error'); return; }
-    if (this._intentsAllRunning) { showNotification('iNTeNT ALl جاري التنفيذ بالفعل…', 'info'); return; }
-    const selectedIds = this._selectedAppIds();
+    const bulk = this._libraryBulkState();
+    if (!bulk.allowed) { showNotification(bulk.reason || 'حدّث المكتبة أولاً', 'warn'); return; }
+    if (this._intentsAllRunning) { showNotification('عملية Intents جارية بالفعل…', 'info'); return; }
+    const selectedIds = bulk.selectedIds;
     const scopeLabel = selectedIds.length ? `${selectedIds.length} بوت محدد` : 'كل بوتات المكتبة';
     const confirmed = await showConfirm(
       `${enabled ? 'تفعيل' : 'إيقاف'} الثلاث Privileged Intents على ${scopeLabel}؟ (المفعّل بالفعل سيتخطى تلقائياً)`,
-      { confirmText: enabled ? 'iNTeNT ALl' : 'Disable all', cancelText: 'إلغاء' }
+      { confirmText: enabled ? 'تفعيل' : 'إيقاف', cancelText: 'إلغاء' }
     );
     if (!confirmed) return;
 
@@ -2851,8 +2915,8 @@ export class TrueStudioManager {
     if (btn) { btn.disabled = true; }
 
     const prog = this._openBatchProgressModal(
-      `Intents للجميع`,
-      `${enabled ? 'تفعيل' : 'إيقاف'} Privileged Intents — الخادم يعالج كل البوتات`
+      `Intents`,
+      `${enabled ? 'تفعيل' : 'إيقاف'} Privileged Intents — الخادم يعالج النطاق المحدد`
     );
     prog.setIndeterminate(true);
     prog.setStatus('جاري الاتصال بالخادم وقراءة المكتبة…');
@@ -3343,7 +3407,9 @@ export class TrueStudioManager {
   // even when the user navigates away. Progress is streamed via SSE.
   async _resetAllBots() {
     if (!this.selectedEmail) { showNotification(t('ts.pick_account_first'), 'error'); return; }
-    if (!this.library) { showNotification(t('ts.reset_all_load_first'), 'error'); return; }
+    const bulk = this._libraryBulkState();
+    if (!bulk.loaded) { showNotification(t('ts.reset_all_load_first'), 'error'); return; }
+    if (!bulk.allowed) { showNotification(bulk.reason || 'حدّث المكتبة أولاً', 'warn'); return; }
     if (this._resetAllInFlight) {
       showNotification(t('ts.reset_all_in_flight'), 'info');
       return;
@@ -3361,7 +3427,7 @@ export class TrueStudioManager {
     } catch (_) {}
 
     // Collect all bots across teams + personal; a selection narrows the operation.
-    const selectedIds = this._selectedAppIds();
+    const selectedIds = bulk.selectedIds;
     const allBots = [
       ...(this.library.personal || []),
       ...(this.library.teams || []).flatMap(tm => tm.apps || []),
@@ -3382,7 +3448,8 @@ export class TrueStudioManager {
       // Send bot list to server — it runs entirely in the background
       await window.electronAPI.tsResetAllStart(
         this.selectedEmail,
-        allBots.map(b => ({ id: b.id, name: b.name, icon: b.icon || null }))
+        allBots.map(b => ({ id: b.id, name: b.name, icon: b.icon || null })),
+        selectedIds.length > 0
       );
       this._resetAllInFlight = true;
       this._raLastFailed = 0;
@@ -3642,7 +3709,7 @@ export class TrueStudioManager {
     const tag = a.isBot ? '<span class="ts-card-tag bot">BOT</span>' : '<span class="ts-card-tag app">APP</span>';
     const selected = this._selectedLibraryApps.has(String(a.id));
     const resetBtn = a.isBot ? `
-      <button class="ts-card-reset" type="button"
+      <button class="ts-card-action ts-card-reset" type="button"
         data-reset-bot="${escapeAttr(a.id)}"
         data-bot-name="${escapeAttr(a.name)}"
         title="${escapeAttr(t('ts.reset_token'))}">
@@ -3658,30 +3725,30 @@ export class TrueStudioManager {
       ((_flags & 4096) && (_flags & 16384) && (_flags & 262144))
     );
     const intentBtn = a.isBot ? `
-      <button class="ts-card-intents${_hasAllIntents ? ' intents-on' : ''}" type="button"
+      <button class="ts-card-action ts-card-intents${_hasAllIntents ? ' intents-on' : ''}" type="button"
         data-intents-bot="${escapeAttr(a.id)}"
         data-bot-name="${escapeAttr(a.name)}"
         title="${_hasAllIntents ? 'Intents مفعّلة — اضغط للتفاصيل' : 'رؤية/تفعيل/إيقاف Privileged Intents الثلاثة'}">
-        ${icon('bolt', 'ts-card-intents-icon')} iNTeNT${_hasAllIntents ? ' <span class="ts-intent-on-dot"></span>' : ''}
+        ${icon('bolt', 'ts-card-intents-icon')} <span>Intents</span>${_hasAllIntents ? ' <span class="ts-intent-on-dot"></span>' : ''}
       </button>` : '';
     const inviteBtn = a.isBot ? `
-      <button class="ts-card-invite" type="button"
+      <button class="ts-card-action ts-card-invite" type="button"
         data-invite-bot="${escapeAttr(a.id)}"
         data-bot-name="${escapeAttr(a.name)}"
         title="رابط دعوة البوت / إضافة تلقائية للسيرفر">
         ${icon('link', 'ts-card-invite-icon')}
-        دعوة
+        <span>دعوة</span>
       </button>` : '';
     const moveBtn = opts.showMoveToTeam ? `
-      <button class="ts-card-move-team" type="button"
+      <button class="ts-card-action ts-card-move-team" type="button"
         data-move-app="${escapeAttr(a.id)}"
         data-app-name="${escapeAttr(a.name)}"
         title="${escapeAttr(t('ts.move_to_team_title'))}">
         ${icon('layers', 'ts-inline-icon')} ${escapeHtml(t('ts.move_to_team_btn'))}
       </button>` : '';
     return `
-      <div class="ts-app-card${a.isBot ? ' has-reset' : ''}${opts.showMoveToTeam ? ' has-move' : ''}${_hasAllIntents ? ' intents-live' : ''}" title="${escapeAttr(a.id)}">
-        <label class="ts-app-select" title="تحديد التطبيق"><input type="checkbox" data-select-app value="${escapeAttr(a.id)}" ${selected ? 'checked' : ''}><span></span></label>
+      <div class="ts-app-card${selected ? ' selected' : ''}${a.isBot ? ' has-reset' : ''}${opts.showMoveToTeam ? ' has-move' : ''}${_hasAllIntents ? ' intents-live' : ''}" title="${escapeAttr(a.id)}">
+        <label class="ts-app-select" title="${selected ? 'إلغاء تحديد التطبيق' : 'تحديد التطبيق'}" aria-label="${selected ? 'إلغاء تحديد التطبيق' : 'تحديد التطبيق'}"><input type="checkbox" data-select-app value="${escapeAttr(a.id)}" ${selected ? 'checked' : ''}><span aria-hidden="true"></span></label>
         <div class="ts-app-thumb">
           ${iconUrl ? `<img src="${iconUrl}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${escapeAttr(initials)}',className:'ts-thumb-text'}))">` : `<span class="ts-thumb-text">${escapeHtml(initials)}</span>`}
           ${_hasAllIntents ? '<span class="ts-card-intent-badge" title="Privileged Intents مفعّلة"></span>' : ''}
@@ -4054,6 +4121,8 @@ export class TrueStudioManager {
       // Clear library if it belongs to a different account
       if (this.libraryEmail && this.libraryEmail !== this.selectedEmail) {
         this.library = null; this.libraryEmail = null; this.libraryError = '';
+        this._libraryAffectedTeamIds = new Set();
+        this._selectedLibraryApps.clear();
       }
       this.render();
     });
@@ -4403,19 +4472,35 @@ export class TrueStudioManager {
     this._patchLibrary();
     try {
       const r = await window.electronAPI.tsLibrary(this.selectedEmail);
+      const warnings = Array.isArray(r.warnings) ? r.warnings : [];
+      const affectedTeamIds = new Set(
+        (Array.isArray(r.affectedTeamIds) ? r.affectedTeamIds : warnings.map(w => w?.teamId))
+          .filter(Boolean)
+          .map(String)
+      );
       this.library = {
         teams: r.teams || [],
         personal: r.personal || [],
         totals: r.totals || {},
         currentUserId: r.currentUserId || null,
         complete: r.complete !== false,
-        warnings: Array.isArray(r.warnings) ? r.warnings : [],
+        warnings,
+        affectedTeamIds: [...affectedTeamIds],
       };
+      this._libraryAffectedTeamIds = affectedTeamIds;
+      // Keep only IDs that still exist in this account's fresh snapshot.
+      const loadedIds = new Set([
+        ...(this.library.personal || []).map(a => String(a.id)),
+        ...(this.library.teams || []).flatMap(team => (team.apps || []).map(a => String(a.id))),
+      ]);
+      this._selectedLibraryApps = new Set([...this._selectedLibraryApps].filter(id => loadedIds.has(String(id))));
       this.currentUserId = r.currentUserId || null;
       this.libraryEmail = this.selectedEmail;
     } catch (e) {
       this.libraryError = e.message || 'Failed to load library';
       this.library = null;
+      this._libraryAffectedTeamIds = new Set();
+      this._selectedLibraryApps.clear();
     } finally {
       this.libraryLoading = false;
       this._patchLibrary();
