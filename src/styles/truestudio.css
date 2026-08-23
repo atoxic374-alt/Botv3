@@ -3915,3 +3915,123 @@ body.light-theme .ts-category .ts-pfp-card .ts-pfp-drop-title,
 body.light-theme .ts-category .ts-pfp-card .ts-pfp-options-title { color: #16322d; }
 body.light-theme .ts-category .ts-pfp-card .ts-pfp-drop-hint,
 body.light-theme .ts-category .ts-pfp-card .ts-pfp-options-meta { color: #5d7773; }
+
+
+/* ── Light theme detail pass: softer canvas, layered surfaces, stronger edges ─ */
+body.light-theme .ts-workspace {
+  --ts-bg: #dce7e5;
+  --ts-card: #edf3f1;
+  --ts-card-2: #e1ebe8;
+  --ts-text: #17332f;
+  --ts-muted: #506b66;
+  --ts-stroke: rgba(25, 71, 64, .19);
+  --ts-stroke-2: rgba(25, 71, 64, .29);
+  --ts-mint: #0b8068;
+  --ts-mint-2: #086b58;
+  --ts-warn: #986300;
+  --ts-danger: #ad2f47;
+}
+body.light-theme .ts-workspace::before {
+  background: radial-gradient(680px 400px at 86% -8%, rgba(77,91,194,.10), transparent 70%), radial-gradient(540px 360px at 5% 32%, rgba(11,128,104,.09), transparent 72%);
+}
+body.light-theme .ts-workspace .ts-command-header {
+  background: linear-gradient(135deg, #eaf2ef 0%, #d8e5e1 100%);
+  border-color: rgba(25,71,64,.22);
+  box-shadow: 0 18px 45px rgba(25,70,63,.13), inset 0 1px 0 rgba(255,255,255,.75);
+}
+body.light-theme .ts-workspace .ts-section-nav {
+  background: rgba(221,232,229,.92);
+  border-color: rgba(25,71,64,.2);
+  box-shadow: 0 10px 26px rgba(25,70,63,.12);
+}
+body.light-theme .ts-workspace .ts-category {
+  border-color: rgba(25,71,64,.19);
+  background: linear-gradient(145deg, #e8f0ee 0%, #dbe6e3 100%);
+  box-shadow: 0 18px 38px rgba(25,70,63,.12), inset 0 1px 0 rgba(255,255,255,.55);
+}
+body.light-theme .ts-workspace .ts-category-overview {
+  border-color: rgba(11,128,104,.24);
+  background: radial-gradient(520px 220px at 10% 0%, rgba(11,128,104,.10), transparent 70%), linear-gradient(145deg, #eaf3f0, #d9e7e3);
+}
+body.light-theme .ts-workspace .ts-category .ts-card {
+  border-color: rgba(25,71,64,.18);
+  background: linear-gradient(155deg, #eef4f2 0%, #e0ebe8 100%);
+  box-shadow: 0 10px 24px rgba(25,70,63,.09), inset 0 1px 0 rgba(255,255,255,.5);
+}
+body.light-theme .ts-workspace .ts-category .ts-card:hover { border-color: rgba(11,128,104,.34); }
+body.light-theme .ts-workspace .ts-stat {
+  background: linear-gradient(155deg, #e9f1ef, #dce8e5);
+  border-color: rgba(25,71,64,.17);
+}
+body.light-theme .ts-workspace .ts-input,
+body.light-theme .ts-workspace .ts-select {
+  background: #d5e2df;
+  color: #17332f;
+  border-color: rgba(25,71,64,.3);
+  box-shadow: inset 0 1px 3px rgba(25,70,63,.08);
+}
+body.light-theme .ts-workspace .ts-input:focus,
+body.light-theme .ts-workspace .ts-select:focus {
+  background: #e3eeeb;
+  border-color: #0b8068;
+  box-shadow: 0 0 0 3px rgba(11,128,104,.14), inset 0 1px 3px rgba(25,70,63,.06);
+}
+body.light-theme .ts-workspace .ts-input::placeholder { color: #66807b; }
+body.light-theme .ts-workspace .ts-btn {
+  background: #d2dfdc;
+  color: #17332f;
+  border-color: rgba(25,71,64,.25);
+  box-shadow: 0 3px 10px rgba(25,70,63,.06);
+}
+body.light-theme .ts-workspace .ts-btn:hover { background: #c5d6d2; border-color: rgba(25,71,64,.4); }
+body.light-theme .ts-workspace .ts-btn.mint { background: #0b8068; color: #f2fffa; border-color: transparent; box-shadow: 0 8px 20px rgba(11,128,104,.2); }
+body.light-theme .ts-workspace .ts-btn.mint:hover { background: #086b58; }
+body.light-theme .ts-workspace .ts-btn.danger { background: rgba(173,47,71,.09); color: #9f2941; border-color: rgba(173,47,71,.3); }
+body.light-theme .ts-workspace .ts-btn.danger:hover { background: rgba(173,47,71,.16); }
+body.light-theme .ts-workspace .ts-toggle { background: #c2d1ce; border-color: rgba(25,71,64,.3); }
+body.light-theme .ts-workspace .ts-toggle::after { background: #f3f9f7; box-shadow: 0 2px 5px rgba(25,70,63,.25); }
+body.light-theme .ts-workspace .ts-toggle.on { background: linear-gradient(90deg, rgba(11,128,104,.45), rgba(77,91,194,.35)); border-color: #0b8068; }
+body.light-theme .ts-workspace .ts-toggle.on::after { background: #0b8068; box-shadow: 0 0 9px rgba(11,128,104,.45); }
+body.light-theme .ts-workspace .ts-speed-pill { background: linear-gradient(155deg, #e1ebe8, #d0dedb); border-color: rgba(25,71,64,.22); color: #17332f; }
+body.light-theme .ts-workspace .ts-speed-pill:hover { background: #d6e5e1; border-color: rgba(11,128,104,.42); }
+body.light-theme .ts-workspace .ts-speed-pill.active { background: linear-gradient(155deg, rgba(11,128,104,.20), rgba(11,128,104,.08)); border-color: #0b8068; box-shadow: 0 8px 20px rgba(25,70,63,.12), 0 0 0 2px rgba(11,128,104,.12); }
+body.light-theme .ts-workspace .ts-speed-pill.warn.active { background: linear-gradient(155deg, rgba(190,133,22,.22), rgba(190,133,22,.08)); border-color: #b17600; }
+body.light-theme .ts-workspace .ts-speed-pill.danger.active { background: linear-gradient(155deg, rgba(173,47,71,.2), rgba(173,47,71,.07)); border-color: #ad2f47; }
+body.light-theme .ts-workspace .ts-log-wrap { background: #cfdcd9; border-color: rgba(25,71,64,.2); }
+body.light-theme .ts-workspace .ts-log-toolbar { background: #d7e4e1; border-bottom-color: rgba(25,71,64,.14); }
+body.light-theme .ts-workspace .ts-log { background: #c7d6d3; }
+body.light-theme .ts-workspace .ts-pfp-card { background: linear-gradient(155deg, #eef4f2, #e0ebe8) !important; }
+body.light-theme .ts-workspace .ts-pfp-options { border-top-color: rgba(25,71,64,.18); }
+body.light-theme .ts-workspace .ts-report-launcher { background: linear-gradient(135deg, rgba(11,128,104,.13), rgba(77,91,194,.11)); border-color: rgba(11,128,104,.26); }
+
+
+/* ── Light theme contrast refinement: visible layers without glare ───────── */
+body.light-theme .ts-workspace {
+  --ts-bg: #d4e0dd;
+  --ts-card: #e6efec;
+  --ts-card-2: #d8e5e1;
+  --ts-text: #142e2a;
+  --ts-muted: #45625d;
+  --ts-stroke: rgba(20, 65, 57, .24);
+  --ts-stroke-2: rgba(20, 65, 57, .34);
+}
+body.light-theme .ts-workspace::before {
+  background: radial-gradient(680px 400px at 86% -8%, rgba(77,91,194,.13), transparent 70%), radial-gradient(540px 360px at 5% 32%, rgba(11,128,104,.12), transparent 72%);
+}
+body.light-theme .ts-workspace .ts-command-header { background: linear-gradient(135deg, #e5eeeb, #cbdad6); }
+body.light-theme .ts-workspace .ts-section-nav { background: rgba(208,222,218,.94); }
+body.light-theme .ts-workspace .ts-category { background: linear-gradient(145deg, #e0ebe8, #d1dfdb); }
+body.light-theme .ts-workspace .ts-category-overview { background: radial-gradient(520px 220px at 10% 0%, rgba(11,128,104,.12), transparent 70%), linear-gradient(145deg, #e4efec, #cfdfdb); }
+body.light-theme .ts-workspace .ts-category .ts-card { background: linear-gradient(155deg, #e6efec, #d8e5e1); }
+body.light-theme .ts-workspace .ts-stat { background: linear-gradient(155deg, #e2ece9, #d3e1dd); }
+body.light-theme .ts-workspace .ts-input,
+body.light-theme .ts-workspace .ts-select { background: #cbdcd8; }
+body.light-theme .ts-workspace .ts-input:focus,
+body.light-theme .ts-workspace .ts-select:focus { background: #dce9e6; }
+body.light-theme .ts-workspace .ts-btn { background: #c5d6d2; }
+body.light-theme .ts-workspace .ts-btn:hover { background: #b8ccc7; }
+body.light-theme .ts-workspace .ts-toggle { background: #b6c8c4; }
+body.light-theme .ts-workspace .ts-speed-pill { background: linear-gradient(155deg, #d7e5e1, #c5d7d3); }
+body.light-theme .ts-workspace .ts-log-wrap { background: #c4d4d0; }
+body.light-theme .ts-workspace .ts-log-toolbar { background: #cddcd8; }
+body.light-theme .ts-workspace .ts-log { background: #baccc7; }

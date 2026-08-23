@@ -15,8 +15,8 @@
 }
 
 body.light-theme .title-bar {
-  background: rgba(251, 255, 253, 0.84);
-  box-shadow: 0 1px 0 rgba(19, 125, 106, 0.12), 0 14px 36px rgba(20, 56, 50, 0.08);
+  background: rgba(232, 241, 238, 0.92);
+  box-shadow: 0 1px 0 rgba(19, 87, 76, 0.16), 0 14px 36px rgba(20, 56, 50, 0.12);
 }
 
 .title-bar .title {
@@ -159,9 +159,9 @@ body.light-theme .title-bar {
 }
 
 body.light-theme .watermark {
-  background: rgba(251, 255, 253, 0.78);
-  color: rgba(18, 32, 31, 0.8);
-  box-shadow: 0 10px 30px rgba(20, 56, 50, 0.12);
+  background: rgba(232, 241, 238, 0.9);
+  color: rgba(18, 45, 41, 0.86);
+  box-shadow: 0 10px 30px rgba(20, 56, 50, 0.16);
 }
 
 @keyframes pulse-dot {
