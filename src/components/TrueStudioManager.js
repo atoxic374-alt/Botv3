@@ -63,6 +63,8 @@ export class TrueStudioManager {
     this.availableTeams = [];         // [{id, name, appCount}] for linkBots dropdown
     this._teamsLoading = false;       // loading state for team dropdown
     this._proxyTestResult = null;     // { ok, ip } | { error } | null
+    this._speedOptionsOpen = false;   // compact by default; expand on demand
+    this._proxyOptionsOpen = false;   // compact by default; expand on demand
     this._pfpPreviewVisible = false;  // toggle pfp preview section
     this._intentsAllRunning = false;  // guard: only one intents-all at a time
     this._pfpAllRunning = false;      // guard: only one pfp-all at a time
@@ -1342,60 +1344,29 @@ export class TrueStudioManager {
       <div class="ts-field-hint">HTTP · HTTPS · SOCKS5H</div>
     `;
 
-    // ── Proxy header row with Bright Data toggle ────────────────────────────
-    const proxyCountBadge = !bd.enabled && (this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length > 1
-      ? `<span class="ts-proxy-count">${icon('check', 'ts-inline-icon')} ${(this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length} بروكسي</span>`
+    // ── Collapsed summaries ───────────────────────────────────────────────────
+    const speedOpen = this._speedOptionsOpen === true;
+    const proxyOpen = this._proxyOptionsOpen === true;
+    const speedMeta = {
+      medium: { label: 'Medium', sub: '1.0x — آمن' },
+      fast: { label: 'Fast', sub: '0.4x — سريع' },
+      veryfast: { label: 'Very Fast', sub: '0.15x — أسرع' },
+      ultra: { label: 'Ultra', sub: '0.05x — أقصى سرعة' },
+    }[this.form.speed] || { label: 'Medium', sub: '1.0x — آمن' };
+    const proxyLines = (this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length;
+    const proxySummary = bd.enabled
+      ? `${bd.zoneName || 'Bright Data غير مكتمل'}${pr?.ok ? ' · يعمل' : ''}`
+      : proxyLines
+        ? `${proxyLines} بروكسي${pr?.ok ? ' · يعمل' : ''}`
+        : 'غير مفعّل';
+    const proxyCountBadge = !bd.enabled && proxyLines > 1
+      ? `<span class="ts-proxy-count">${icon('check', 'ts-inline-icon')} ${proxyLines} بروكسي</span>`
       : '';
-
-    return `
-      <div class="ts-field" style="margin-top:12px;">
-        <div class="ts-field-label">سرعة التنفيذ</div>
-        <div class="ts-speed-pills">
-          ${[
-            { v:'medium',   label:'Medium',    sub:'1.0x — آمن',          cls:'' },
-            { v:'fast',     label:'Fast',      sub:'0.4x — سريع',         cls:'' },
-            { v:'veryfast', label:'Very Fast', sub:'0.15x — أسرع',        cls:'warn' },
-            { v:'ultra',    label:'Ultra',     sub:'0.05x — أقصى سرعة',     cls:'danger' },
-          ].map(s => `
-            <label class="ts-speed-pill ${this.form.speed === s.v ? 'active' : ''} ${s.cls}">
-              <input type="radio" name="ts-speed" value="${s.v}" ${this.form.speed === s.v ? 'checked' : ''} style="display:none">
-              <span class="ts-speed-pill-label">${s.label}</span>
-              <span class="ts-speed-pill-sub">${s.sub}</span>
-            </label>`).join('')}
-        </div>
-        <div class="ts-field-hint">السرعات العالية تحتاج Proxy.</div>
-      </div>
-
-      <div class="ts-field" style="margin-top:8px;">
-        <div class="ts-field-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <span>${bd.enabled ? 'Bright Data' : 'Proxy'}</span>
-            ${!bd.enabled
-              ? `<span style="font-size:10px;color:var(--ts-muted,#7e8592);">(اختياري)</span>${proxyCountBadge}`
-              : `<span style="font-size:10px;color:#3ba55d;">IP rotation تلقائي</span>`}
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            ${bd.enabled ? `
-              <button id="ts-quick-setup" class="ts-btn ts-quick-setup-btn${qsOpen ? ' is-open' : ''}">
-                ${icon('bolt', 'ts-inline-icon')} إعداد سريع <span class="ts-quick-arrow">${qsOpen ? '↑' : '↓'}</span>
-              </button>
-            ` : ''}
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;">
-              <span style="font-size:10px;color:var(--ts-muted,#7e8592);">Bright Data</span>
-              <div class="ts-toggle ${bd.enabled ? 'on' : ''}" id="ts-bd-toggle"
-                role="switch" aria-checked="${bd.enabled}"
-                title="تبديل IP تلقائياً"></div>
-            </label>
-          </div>
-        </div>
-        ${bdForm}
-      </div>
-
-      ${(bd.enabled || (this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length > 1) ? `
-      <div class="ts-field" style="margin-top:8px;">
+    const batchSettings = (bd.enabled || proxyLines > 1) ? `
+      <div class="ts-field ts-proxy-batch-field">
         <div class="ts-field-label" style="display:flex;align-items:center;gap:6px;">
           <span>حجم الدفعة</span>
-          <span style="font-size:10px;color:#3ba55d;background:rgba(59,165,93,.12);padding:1px 6px;border-radius:4px;">IP Rotation نشط</span>
+          <span class="ts-proxy-rotation-badge">IP Rotation نشط</span>
         </div>
         <select class="ts-input" id="ts-batch-size">
           <option value="1" ${(this.form.batchSize||1)===1?'selected':''}>1 — تسلسلي</option>
@@ -1404,11 +1375,67 @@ export class TrueStudioManager {
           <option value="4" ${(this.form.batchSize||1)===4?'selected':''}>4 بوت</option>
           <option value="5" ${(this.form.batchSize||1)===5?'selected':''}>5 بوت — سريع</option>
         </select>
-        <div class="ts-field-hint">
-          يعمل مع Bright Data أو عدة بروكسيات.
-        </div>
+        <div class="ts-field-hint">يعمل مع Bright Data أو عدة بروكسيات.</div>
+      </div>` : '';
+
+    return `
+      <div class="ts-collapsible-field ts-speed-collapse${speedOpen ? ' is-open' : ''}">
+        <button type="button" id="ts-speed-toggle" class="ts-collapse-trigger" aria-expanded="${speedOpen}" aria-controls="ts-speed-options">
+          <span class="ts-collapse-leading">${icon('bolt', 'ts-inline-icon')}</span>
+          <span class="ts-collapse-title">سرعة التنفيذ</span>
+          <span class="ts-collapse-summary">${speedMeta.label} · ${speedMeta.sub}</span>
+          <span class="ts-collapse-chevron">${icon(speedOpen ? 'chevron_up' : 'chevron_down', 'ts-inline-icon')}</span>
+        </button>
+        ${speedOpen ? `
+          <div class="ts-collapse-body" id="ts-speed-options">
+            <div class="ts-speed-pills">
+              ${[
+                { v:'medium', label:'Medium', sub:'1.0x — آمن', cls:'' },
+                { v:'fast', label:'Fast', sub:'0.4x — سريع', cls:'' },
+                { v:'veryfast', label:'Very Fast', sub:'0.15x — أسرع', cls:'warn' },
+                { v:'ultra', label:'Ultra', sub:'0.05x — أقصى سرعة', cls:'danger' },
+              ].map(s => `
+                <label class="ts-speed-pill ${this.form.speed === s.v ? 'active' : ''} ${s.cls}">
+                  <input type="radio" name="ts-speed" value="${s.v}" ${this.form.speed === s.v ? 'checked' : ''} style="display:none">
+                  <span class="ts-speed-pill-label">${s.label}</span>
+                  <span class="ts-speed-pill-sub">${s.sub}</span>
+                </label>`).join('')}
+            </div>
+            <div class="ts-field-hint">السرعات العالية تحتاج Proxy.</div>
+          </div>` : ''}
       </div>
-      ` : ''}
+
+      <div class="ts-collapsible-field ts-proxy-collapse${proxyOpen ? ' is-open' : ''}">
+        <div class="ts-collapse-header-row">
+          <button type="button" id="ts-proxy-toggle" class="ts-collapse-trigger" aria-expanded="${proxyOpen}" aria-controls="ts-proxy-options">
+            <span class="ts-collapse-leading">${icon('link', 'ts-inline-icon')}</span>
+            <span class="ts-collapse-title">${bd.enabled ? 'Bright Data' : 'Proxy'}</span>
+            <span class="ts-collapse-summary">${escapeHtml(proxySummary)}</span>
+            <span class="ts-collapse-chevron">${icon(proxyOpen ? 'chevron_up' : 'chevron_down', 'ts-inline-icon')}</span>
+          </button>
+          <label class="ts-collapse-switch" title="تبديل IP تلقائياً">
+            <span>Bright Data</span>
+            <div class="ts-toggle ${bd.enabled ? 'on' : ''}" id="ts-bd-toggle" role="switch" aria-checked="${bd.enabled}"></div>
+          </label>
+        </div>
+        ${proxyOpen ? `
+          <div class="ts-collapse-body" id="ts-proxy-options">
+            <div class="ts-proxy-context-row">
+              <span>${bd.enabled ? 'إعدادات Bright Data' : 'قائمة Proxy اختيارية'}</span>
+              ${!bd.enabled ? proxyCountBadge : `<span class="ts-proxy-rotation-badge">IP rotation تلقائي</span>`}
+            </div>
+            ${bd.enabled ? `
+              <div class="ts-proxy-tools-row">
+                <span class="ts-field-hint">أدخل بيانات Zone ثم اختبر الاتصال قبل البدء.</span>
+                <button id="ts-quick-setup" type="button" class="ts-btn ts-quick-setup-btn${qsOpen ? ' is-open' : ''}">
+                  ${icon('bolt', 'ts-inline-icon')} إعداد سريع <span class="ts-quick-arrow">${icon(qsOpen ? 'chevron_up' : 'chevron_down', 'ts-inline-icon')}</span>
+                </button>
+              </div>
+            ` : ''}
+            ${bdForm}
+            ${batchSettings}
+          </div>` : ''}
+      </div>
     `;
   }
 
@@ -3999,6 +4026,16 @@ export class TrueStudioManager {
     $('#ts-prefix')?.addEventListener('input', (e) => this.form.prefix = e.target.value);
     $('#ts-wait')?.addEventListener('input', (e) => {
       this.form.waitMinutes = Math.max(0, Math.min(60, parseInt(e.target.value) || 0));
+    });
+
+    // Collapsible speed and proxy sections
+    $('#ts-speed-toggle')?.addEventListener('click', () => {
+      this._speedOptionsOpen = !this._speedOptionsOpen;
+      this.render();
+    });
+    $('#ts-proxy-toggle')?.addEventListener('click', () => {
+      this._proxyOptionsOpen = !this._proxyOptionsOpen;
+      this.render();
     });
 
     // Speed pills (radio buttons)

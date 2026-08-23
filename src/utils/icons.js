@@ -27,7 +27,9 @@ const SVG = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
   back: '<path d="m15 18-6-6 6-6M9 12h12"/>',
-  skip: '<path d="m8 5 7 7-7 7M16 5v14"/>'
+  skip: '<path d="m8 5 7 7-7 7M16 5v14"/>',
+  chevron_down: '<path d="m6 9 6 6 6-6"/>',
+  chevron_up: '<path d="m6 15 6-6 6 6"/>'
 };
 
 export function icon(name, cls = '') {
