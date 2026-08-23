@@ -4536,13 +4536,15 @@ export class TrueStudioManager {
     if (info) info.innerHTML = `<span class="ts-verify v-idle">${t('ts.testing')}</span>`;
     try {
       const r = await window.electronAPI.tsTestAccount(this.selectedEmail);
+      if (!r?.verify) throw new Error(r?.error || 'لم تصل نتيجة تحقق صالحة من الخادم');
       this.accounts = r?.accounts || this.accounts;
-      const ok = r?.verify?.ok;
+      const ok = r.verify.ok === true;
       const mfaEnabled = r?.verify?.user?.mfa_enabled === true;
-      const notice = !mfaEnabled
-        ? t('ts.team_2fa_not_enabled')
-        : (ok ? t('ts.verify_ok') : (t('ts.verify_failed') + ': ' + (r?.verify?.message || '')));
-      showNotification(notice, ok && mfaEnabled ? 'success' : 'error');
+      const detail = r?.verify?.message || r?.verify?.status || '';
+      const notice = ok
+        ? `${t('ts.verify_ok')}${mfaEnabled ? '' : ` · ${t('ts.team_2fa_not_enabled')}`}`
+        : `${t('ts.verify_failed')}${detail ? ': ' + detail : ''}`;
+      showNotification(notice, ok ? 'success' : 'error');
     } catch (e) {
       showNotification(e.message || 'Test failed', 'error');
     } finally {

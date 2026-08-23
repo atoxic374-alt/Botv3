@@ -37,6 +37,28 @@ async function json(path, options) {
   assert.equal(tokenWithoutPassword.body?.success, false, 'direct token account without password should be rejected');
   assert.match(tokenWithoutPassword.body?.error || '', /Password is required/i, 'password requirement should be explicit');
 
+  const normalizedToken = await json('/api/ts/accounts', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'smoke-normalized-token@example.invalid',
+      password: 'smoke-password',
+      directToken: 'Authorization: Bearer fake-discord-token-1234567890',
+    }),
+  });
+  assert.equal(normalizedToken.body?.success, true, 'complete Authorization/Bearer token should be accepted');
+  assert.equal(normalizedToken.body?.account?.hasDirectToken, true, 'normalized token should be stored');
+
+  const shortToken = await json('/api/ts/accounts', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'smoke-short-token@example.invalid',
+      password: 'smoke-password',
+      directToken: 'short-token',
+    }),
+  });
+  assert.equal(shortToken.body?.success, false, 'short direct token should be rejected');
+  assert.match(shortToken.body?.error || '', /too short/i, 'short token error should be explicit');
+
   const teamsWithoutEmail = await json('/api/ts/teams');
   assert.equal(teamsWithoutEmail.body?.success, false, 'teams without account should fail safely');
 
@@ -101,6 +123,9 @@ async function json(path, options) {
 
   const removed = await json('/api/ts/profiles/' + encodeURIComponent(profileId), { method: 'DELETE' });
   assert.equal(removed.body?.success, true, 'profile should delete');
+  for (const email of ['smoke-normalized-token@example.invalid', 'smoke-short-token@example.invalid']) {
+    await json('/api/ts/accounts/' + encodeURIComponent(email), { method: 'DELETE' });
+  }
   console.log('Botv3 smoke tests passed');
 })().catch((error) => {
   console.error('Botv3 smoke tests failed:', error.message);

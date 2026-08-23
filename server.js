@@ -288,13 +288,22 @@ const ts = require('./lib/trueStudio');
     return /^tok-\d+@local$/i.test(String(email || '').trim());
   }
 
+  function normalizeTsUserToken(value) {
+    return String(value || '')
+      .trim()
+      .replace(/^authorization\s*:\s*/i, '')
+      .replace(/^bearer\s+/i, '')
+      .replace(/^['"]|['"]$/g, '')
+      .trim();
+  }
+
   function tsDecryptAccount(rec) {
     if (!rec) return null;
     return {
       email: rec.email,
       password: tryDecrypt(rec.password) || rec.password || '',
       totpSecret: tryDecrypt(rec.totpSecret) || rec.totpSecret || '',
-      directToken: tryDecrypt(rec.directToken) || rec.directToken || '',
+      directToken: normalizeTsUserToken(tryDecrypt(rec.directToken) || rec.directToken || ''),
     };
   }
 
@@ -351,17 +360,15 @@ const ts = require('./lib/trueStudio');
     // ── Option A: Direct token (warm client, skip login) ──────────
     if (creds.directToken) {
       const client = ts.createClient();
-      tsLog('info', 'استخدام التوكن المباشر — جاري تسخين الجلسة…');
-      let warmed = false;
-      try {
-        await ts.warmUpClient(client);
-        warmed = true;
-      } catch (e) {
-        tsLog('warn', 'تعذر تسخين الجلسة: ' + (e.message || e), { operation: 'warmup', confirmed: false });
+      tsLog('info', 'استخدام التوكن المباشر — تجهيز الاتصال…', { operation: 'warmup', confirmed: false });
+      const warmup = await ts.warmUpClient(client);
+      if (!warmup?.ok) {
+        tsLog('warn', 'تعذر اتصال Discord أثناء التسخين؛ ستتم تجربة التحقق الأساسي الآن', {
+          operation: 'warmup', confirmed: false, code: warmup?.error?.code || 'WARMUP_NETWORK_ERROR',
+        });
       }
-      if (!warmed) throw new Error('تعذر تجهيز جلسة التوكن المباشر');
       tsStoreToken(email, creds.directToken, client);
-      tsLog('info', 'جلسة التوكن المباشر جاهزة بعد التحقق', { operation: 'warmup', confirmed: true });
+      tsLog('info', 'تم تجهيز عميل الاتصال؛ جارٍ التحقق الفعلي من الحساب', { operation: 'warmup', confirmed: false });
       return { token: creds.directToken, client };
     }
 
@@ -486,6 +493,16 @@ const ts = require('./lib/trueStudio');
 
   function isRateLimitedError(err) {
     return err?.status === 429 || err?.code === 'RATE_LIMITED' || err?.code === 'CLOUDFLARE_BLOCK' || /rate[- ]?limit|429/i.test(err?.message || '');
+  }
+
+  function tsNetworkErrorMessage(error) {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || error || '');
+    if (/^(ECONN|ETIMEDOUT|EAI_AGAIN|EHOST|ENET|EPROTO|ERR_TLS)/.test(code)
+      || /socket|tls|network|secure connection|timeout|connect/i.test(message)) {
+      return 'تعذر الاتصال بـ Discord مؤقتاً (TLS/الشبكة). أعد المحاولة بعد قليل.';
+    }
+    return message.slice(0, 220) || 'تعذر الوصول إلى Discord للتحقق من التوكن';
   }
 
   // Detects Cloudflare IP blocks vs normal Discord 429s.
@@ -1284,8 +1301,11 @@ const ts = require('./lib/trueStudio');
     // intentionally retained when the user edits only the token or 2FA field.
     if (typeof totpSecret === 'string' && totpSecret) rec.totpSecret = encrypt(totpSecret.replace(/\s+/g, ''));
     else if (totpSecret === '') rec.totpSecret = '';
-    if (typeof directToken === 'string' && directToken.trim()) rec.directToken = encrypt(directToken.trim());
-    else if (directToken === '') rec.directToken = '';
+    if (typeof directToken === 'string' && directToken.trim()) {
+      const normalizedToken = normalizeTsUserToken(directToken);
+      if (normalizedToken.length < 20) return fail(res, new Error('Token is too short — paste the complete Discord user token'));
+      rec.directToken = encrypt(normalizedToken);
+    } else if (directToken === '') rec.directToken = '';
     writeData(d);
     ok(res, { account: { email: rec.email, hasPassword: !!rec.password, hasTotp: !!rec.totpSecret, hasDirectToken: !!rec.directToken, addedAt: rec.addedAt } });
   });
@@ -1931,30 +1951,55 @@ const ts = require('./lib/trueStudio');
       try {
         let token, userId;
         if (creds.directToken) {
-          // Direct token path — no login needed, verify it immediately
-          token = creds.directToken;
+          // Direct token path — no login needed, verify it immediately.
+          token = normalizeTsUserToken(creds.directToken);
           tsLog('info', 'اختبار التوكن المباشر…');
+          const warmup = await ts.warmUpClient(client);
+          if (!warmup?.ok) {
+            tsLog('warn', 'تعذر اتصال Discord أثناء التسخين؛ سيستمر الاختبار بالطلب الأساسي', {
+              operation: 'account_test', stage: 'warmup', confirmed: false,
+              code: warmup?.error?.code || 'WARMUP_NETWORK_ERROR',
+            });
+          }
         } else {
           const r = await ts.login({
             email: creds.email, password: creds.password, totpSecret: creds.totpSecret, netOpts,
           });
           token = r.token; userId = r.userId;
         }
-        // Use the same warmed client for /users/@me so cookies match
-        const meR = await client.http.get('https://discord.com/api/v9/users/@me', {
-          headers: {
-            Authorization: token,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'X-Super-Properties': client.superPropsB64,
-            'X-Fingerprint': client.fingerprint || undefined,
-            'Origin': 'https://discord.com',
-            'Referer': 'https://discord.com/channels/@me',
-          },
-          timeout: 15000, validateStatus: () => true,
-        }).catch(() => ({ status: 0, data: null }));
-        if (meR.status >= 400) {
-          verify.status = 'token_unusable';
-          verify.message = `Login OK but /users/@me returned ${meR.status}`;
+        // Use the same warmed client for /users/@me so cookies match.
+        let meR = null;
+        try {
+          meR = await client.http.get('https://discord.com/api/v9/users/@me', {
+            headers: {
+              Authorization: token,
+              'User-Agent': client.uaInfo?.ua,
+              'X-Super-Properties': client.superPropsB64,
+              'X-Fingerprint': client.fingerprint || undefined,
+              'Origin': 'https://discord.com',
+              'Referer': 'https://discord.com/channels/@me',
+            },
+            timeout: 12_000, validateStatus: () => true,
+          });
+        } catch (error) {
+          const code = String(error?.code || '').toUpperCase();
+          const rawMessage = String(error?.message || error || '');
+          const isNetwork = error?.code === 'NETWORK_ERROR'
+            || /^(ECONN|ETIMEDOUT|EAI_AGAIN|EHOST|ENET|EPROTO|ERR_TLS)/.test(code)
+            || /socket|tls|network|secure connection|timeout|connect/i.test(rawMessage);
+          verify.status = isNetwork ? 'network_error' : 'request_failed';
+          verify.message = isNetwork ? tsNetworkErrorMessage(error) : (rawMessage || 'تعذر الوصول إلى Discord للتحقق من التوكن');
+        }
+        if (!meR) {
+          verify.ok = false;
+        } else if (meR.status < 200 || meR.status >= 300) {
+          verify.status = meR.status === 401 ? 'invalid_token' : 'token_unusable';
+          verify.message = meR.status === 401
+            ? 'Discord رفض التوكن (401). الصق توكن Authorization كاملاً وحدّثه.'
+            : `Discord رفض طلب التحقق (/users/@me: ${meR.status})`;
+        } else if (!meR.data?.id) {
+          verify.status = 'invalid_response';
+          verify.message = 'Discord أعاد استجابة غير صالحة؛ لم يتم العثور على هوية الحساب.';
         } else {
           verify.ok = true;
           verify.status = 'verified';
@@ -1965,7 +2010,7 @@ const ts = require('./lib/trueStudio');
             mfa_enabled: !!meR.data?.mfa_enabled,
             verified: !!meR.data?.verified,
           };
-          const health = await ts.accountHealthProbe({ token, netOpts: { client } });
+          const health = await ts.accountHealthProbe({ token, netOpts: { client }, skipUser: true });
           verify.health = health;
           if (!health.ready) {
             verify.ok = false;
@@ -2995,17 +3040,15 @@ const ts = require('./lib/trueStudio');
         client = ts.createClient(loginProxy);
         if (bd)         tsLog('info', 'الجلسة عبر Bright Data — ' + (bd.protocol === 'socks5h' ? 'SOCKS5h' : 'HTTP') + ' · Zone: ' + bd.zoneName);
         else if (loginProxy) tsLog('info', 'الجلسة تمر عبر Proxy: ' + loginProxy.replace(/:[^:@]+@/, ':***@'));
-        tsLog('info', 'استخدام التوكن المباشر — جاري تسخين الجلسة…');
-        let warmed = false;
-        try {
-          await ts.warmUpClient(client);
-          warmed = true;
-        } catch (e) {
-          tsLog('warn', 'تعذر تسخين الجلسة: ' + (e.message || e), { operation: 'warmup', confirmed: false });
+        tsLog('info', 'استخدام التوكن المباشر — تجهيز الاتصال…', { operation: 'warmup', confirmed: false });
+        const warmup = await ts.warmUpClient(client);
+        if (!warmup?.ok) {
+          tsLog('warn', 'تعذر اتصال Discord أثناء التسخين؛ ستتم تجربة التحقق الأساسي الآن', {
+            operation: 'warmup', confirmed: false, code: warmup?.error?.code || 'WARMUP_NETWORK_ERROR',
+          });
         }
-        if (!warmed) throw new Error('تعذر تجهيز جلسة التوكن المباشر');
         tsStoreToken(creds.email, token, client);
-        tsLog('info', 'جلسة التوكن المباشر جاهزة بعد التحقق', { operation: 'warmup', confirmed: true });
+        tsLog('info', 'تم تجهيز عميل الاتصال؛ جارٍ التحقق الفعلي من الحساب', { operation: 'warmup', confirmed: false });
       } else {
         tsLog('info', 'جاري تسجيل الدخول إلى ' + creds.email + '…');
         const loginProxy = bd ? buildBrightDataUrl(bd, 'login') : (proxyList[0] || null);
@@ -3094,15 +3137,13 @@ const ts = require('./lib/trueStudio');
           _token = acct.directToken;
           const _lp = bd ? buildBrightDataUrl(bd, 'login') : (proxyList[0] || null);
           _client = ts.createClient(_lp);
-          tsLog('info', `${_email}: تسخين جلسة التوكن المباشر…`);
-          let _warmed = false;
-          try {
-            await ts.warmUpClient(_client);
-            _warmed = true;
-          } catch (_e) {
-            tsLog('warn', `${_email}: تعذر تسخين الجلسة: ` + (_e.message || _e), { operation: 'warmup', confirmed: false });
+          tsLog('info', `${_email}: تجهيز اتصال التوكن المباشر…`, { operation: 'warmup', confirmed: false });
+          const _warmup = await ts.warmUpClient(_client);
+          if (!_warmup?.ok) {
+            tsLog('warn', `${_email}: تعذر اتصال Discord أثناء التسخين؛ ستتم تجربة التحقق الأساسي الآن`, {
+              operation: 'warmup', confirmed: false, code: _warmup?.error?.code || 'WARMUP_NETWORK_ERROR',
+            });
           }
-          if (!_warmed) throw new Error(`${_email}: تعذر تجهيز جلسة التوكن المباشر`);
           tsStoreToken(_email, _token, _client);
         } else if (acct.password) {
           tsLog('info', `${_email}: تسجيل دخول…`);
