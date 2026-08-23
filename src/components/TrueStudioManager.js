@@ -399,176 +399,219 @@ export class TrueStudioManager {
     const sel = this.accounts.find(a => a.email === this.selectedEmail) || null;
 
     this.contentArea.innerHTML = `
-      <div class="ts-wrap ts-compact-ui" dir="rtl">
-        <div class="ts-brand">
+      <div class="ts-wrap ts-compact-ui ts-workspace" dir="rtl">
+        <header class="ts-brand ts-command-header">
           <div class="ts-brand-main">
+            <span class="ts-brand-icon" aria-hidden="true">${icon('robot')}</span>
             <div class="ts-brand-pulse" title="online"></div>
             <div class="ts-brand-title">
               <div class="ts-brand-name">Bot-Studio</div>
               <div class="ts-brand-sub">إدارة البوتات · v${VERSION}</div>
             </div>
           </div>
-          <div class="ts-credit-panel" aria-label="Owner credit">
-            <span class="ts-credit-kicker">OWNER</span>
-            <span class="ts-credit-name">${escapeHtml(OWNER_NAME)}</span>
-            <a class="ts-credit-link" href="${escapeAttr(DISCORD_INVITE)}" target="_blank" rel="noopener">${escapeHtml(DISCORD_LABEL)}</a>
-          </div>
-        </div>
-
-        <div class="ts-stats">
-          <div class="ts-stat">
-            <div class="ts-stat-label">${t('ts.live_progress')}</div>
-            <div class="ts-stat-value" id="ts-progress-value">${this._renderProgress(s)}</div>
-          </div>
-          <div class="ts-stat">
-            <div class="ts-stat-label">${t('ts.automation_status')}</div>
-            <div class="ts-stat-value ${meta.cls}" id="ts-status-value">${this._renderStatus(s, meta)}</div>
-            ${s.state === 'waiting' ? `<div class="ts-countdown-bar" id="ts-countdown-bar"><span style="width:0%"></span></div>` : ''}
-          </div>
-        </div>
-        ${this._renderAccountRateLimits(s)}
-
-        <!-- Live account pool panel -->
-        <div id="ts-account-pool">${this._renderAccountPool(s)}</div>
-
-        <!-- Account picker -->
-        <div class="ts-card ts-accounts-card">
-          <div class="ts-card-head">
-            <div class="ts-card-title ar">${t('ts.accounts_section')}</div>
-          </div>
-          <div class="ts-field">
-            <div class="ts-field-label">${t('ts.active_account')}</div>
-            <div class="ts-account-row">
-              <button class="ts-btn danger" id="ts-acct-delete" ${sel ? '' : 'disabled'}>${t('ts.delete')}</button>
-              <button class="ts-btn mint" id="ts-acct-save">${t('ts.save_account')}</button>
-              <select class="ts-select" id="ts-acct-select">
-                <option value="">${t('ts.choose_or_add')}</option>
-                ${this.accounts.map(a => `
-                  <option value="${escapeAttr(a.email)}" ${a.email === this.selectedEmail ? 'selected' : ''}>${this._optionLabel(a)}</option>
-                `).join('')}
-              </select>
+          <div class="ts-header-meta">
+            <span class="ts-header-mode"><i></i>${escapeHtml(t('ts.ui_workspace_mode') || 'مساحة العمل')}</span>
+            <div class="ts-credit-panel" aria-label="Owner credit">
+              <span class="ts-credit-kicker">OWNER</span>
+              <span class="ts-credit-name">${escapeHtml(OWNER_NAME)}</span>
+              <a class="ts-credit-link" href="${escapeAttr(DISCORD_INVITE)}" target="_blank" rel="noopener">${escapeHtml(DISCORD_LABEL)}</a>
             </div>
-            <div class="ts-account-row" style="margin-top:8px;">
-              <button class="ts-btn" id="ts-acct-test" ${sel ? '' : 'disabled'}>${t('ts.test_account')}</button>
-              <button class="ts-btn" id="ts-acct-test-all" ${this.accounts.length ? '' : 'disabled'}>${icon('shield', 'ts-inline-icon')} فحص الكل</button>
-              <div></div>
-              <div id="ts-verify-info" class="ts-verify-info">${this._verifyLabel(sel)}</div>
-            </div>
-            ${this.accounts.length === 0 ? `<div class="ts-account-empty">${t('ts.no_accounts_yet')}</div>` : ''}
           </div>
-        </div>
+        </header>
 
-        <!-- Selected account credentials -->
-        <div class="ts-card ts-credentials-card">
-          <div class="ts-card-head">
-            <div class="ts-card-title ar">${t('ts.account_data')}</div>
-          </div>
+        <nav class="ts-section-nav" aria-label="${escapeAttr(t('ts.ui_section_nav') || 'أقسام الواجهة')}">
+          <a href="#ts-cat-overview" class="ts-section-nav-item active"><span class="ts-nav-index">00</span><span>${escapeHtml(t('ts.ui_overview') || 'نظرة عامة')}</span></a>
+          <a href="#ts-cat-setup" class="ts-section-nav-item"><span class="ts-nav-index">01</span><span>${escapeHtml(t('ts.ui_setup') || 'الإعداد')}</span></a>
+          <a href="#ts-cat-automation" class="ts-section-nav-item"><span class="ts-nav-index">02</span><span>${escapeHtml(t('ts.ui_automation') || 'التشغيل')}</span></a>
+          <a href="#ts-cat-assets" class="ts-section-nav-item"><span class="ts-nav-index">03</span><span>${escapeHtml(t('ts.ui_assets') || 'الهوية والحماية')}</span></a>
+          <a href="#ts-cat-reports" class="ts-section-nav-item"><span class="ts-nav-index">04</span><span>${escapeHtml(t('ts.ui_reports') || 'السجل والمكتبة')}</span></a>
+        </nav>
 
-          <!-- ── Method A: Direct Token ──────────────────── -->
-          <div class="ts-method-banner">
-            <span class="ts-method-badge token">${t('ts.method_a_badge')}</span>
-            <span class="ts-method-hint">${t('ts.method_a_hint')}</span>
-          </div>
-          <div class="ts-field">
-            <div class="ts-field-label">Discord User Token</div>
-            <input type="password" id="ts-direct-token" class="ts-input ltr"
-              value=""
-              placeholder="${sel?.hasDirectToken ? `•••••• ${t('ts.direct_token_saved_ph')}` : t('ts.direct_token_ph')}"
-              autocomplete="off" />
-            ${sel?.hasDirectToken ? `<div class="ts-field-hint ok">${t('ts.direct_token_saved_hint')}</div>` : `<div class="ts-field-hint">${t('ts.direct_token_how')}</div>`}
-          </div>
-
-          <details class="ts-method-collapsible">
-            <summary><span class="ts-method-badge email">${t('ts.method_b_badge')}</span><span class="ts-method-hint">${t('ts.method_b_hint')}</span><span class="ts-collapse-arrow"></span></summary>
-            <div class="ts-form-grid ts-method-body">
-              <div class="ts-field">
-                <div class="ts-field-label">Email</div>
-                <input type="email" id="ts-email" class="ts-input ltr" value="${escapeAttr(this.form.email)}" placeholder="name@example.com" autocomplete="off" />
+        <section class="ts-category ts-category-overview" id="ts-cat-overview">
+          <div class="ts-category-lead">
+            <div class="ts-category-kicker"><span class="ts-category-line"></span> BOT STUDIO / 00</div>
+            <div class="ts-category-title-row">
+              <div>
+                <h1>${escapeHtml(t('ts.ui_overview') || 'نظرة عامة')}</h1>
+                <p>${escapeHtml(t('ts.ui_overview_desc') || 'راقب حالة الجلسة والحسابات قبل بدء أي عملية.')}</p>
               </div>
-              <div class="ts-field">
-                <div class="ts-field-label">Password</div>
-                <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" />
+              <span class="ts-state-orb ${meta.cls || ''}" aria-hidden="true"></span>
+            </div>
+          </div>
+          <div class="ts-stats">
+            <div class="ts-stat ts-stat-progress">
+              <div class="ts-stat-label">${t('ts.live_progress')}</div>
+              <div class="ts-stat-value" id="ts-progress-value">${this._renderProgress(s)}</div>
+              <span class="ts-stat-caption">${escapeHtml(t('ts.ui_progress_caption') || 'نتيجة الجلسة الحالية')}</span>
+            </div>
+            <div class="ts-stat ts-stat-status">
+              <div class="ts-stat-label">${t('ts.automation_status')}</div>
+              <div class="ts-stat-value ${meta.cls}" id="ts-status-value">${this._renderStatus(s, meta)}</div>
+              <span class="ts-stat-caption">${escapeHtml(t('ts.ui_status_caption') || 'الحالة الفعلية للمحرك')}</span>
+              ${s.state === 'waiting' ? `<div class="ts-countdown-bar" id="ts-countdown-bar"><span style="width:0%"></span></div>` : ''}
+            </div>
+          </div>
+          ${this._renderAccountRateLimits(s)}
+          <div id="ts-account-pool">${this._renderAccountPool(s)}</div>
+        </section>
+
+        <section class="ts-category" id="ts-cat-setup">
+          <div class="ts-category-heading">
+            <div><span class="ts-category-number">01</span><h2>${escapeHtml(t('ts.ui_setup') || 'الإعداد الأساسي')}</h2></div>
+            <p>${escapeHtml(t('ts.ui_setup_desc') || 'اختر الحساب وحدد طريقة الدخول قبل ضبط أي خيارات إضافية.')}</p>
+          </div>
+          <div class="ts-category-grid ts-category-grid-setup">
+            <div class="ts-category-primary">
+              <div class="ts-card ts-accounts-card">
+                <div class="ts-card-head">
+                  <div class="ts-card-title ar">${t('ts.accounts_section')}</div>
+                  <span class="ts-card-step">01 / ACCOUNT</span>
+                </div>
+                <div class="ts-field">
+                  <div class="ts-field-label">${t('ts.active_account')}</div>
+                  <div class="ts-account-row">
+                    <button class="ts-btn danger" id="ts-acct-delete" ${sel ? '' : 'disabled'}>${t('ts.delete')}</button>
+                    <button class="ts-btn mint" id="ts-acct-save">${t('ts.save_account')}</button>
+                    <select class="ts-select" id="ts-acct-select">
+                      <option value="">${t('ts.choose_or_add')}</option>
+                      ${this.accounts.map(a => `
+                        <option value="${escapeAttr(a.email)}" ${a.email === this.selectedEmail ? 'selected' : ''}>${this._optionLabel(a)}</option>
+                      `).join('')}
+                    </select>
+                  </div>
+                  <div class="ts-account-row" style="margin-top:8px;">
+                    <button class="ts-btn" id="ts-acct-test" ${sel ? '' : 'disabled'}>${t('ts.test_account')}</button>
+                    <button class="ts-btn" id="ts-acct-test-all" ${this.accounts.length ? '' : 'disabled'}>${icon('shield', 'ts-inline-icon')} فحص الكل</button>
+                    <div></div>
+                    <div id="ts-verify-info" class="ts-verify-info">${this._verifyLabel(sel)}</div>
+                  </div>
+                  ${this.accounts.length === 0 ? `<div class="ts-account-empty">${t('ts.no_accounts_yet')}</div>` : ''}
+                </div>
               </div>
-              <div class="ts-field ts-method-totp">
-                <div class="ts-field-label">2FA Secret</div>
-                <input type="text" id="ts-totp" class="ts-input totp" value="" placeholder="${sel?.hasTotp ? '••••••••' : '2FA secret'}" autocomplete="off" />
+
+              <div class="ts-card ts-credentials-card">
+                <div class="ts-card-head">
+                  <div class="ts-card-title ar">${t('ts.account_data')}</div>
+                  <span class="ts-card-step">02 / ACCESS</span>
+                </div>
+                <div class="ts-method-banner">
+                  <span class="ts-method-badge token">${t('ts.method_a_badge')}</span>
+                  <span class="ts-method-hint">${t('ts.method_a_hint')}</span>
+                </div>
+                <div class="ts-field">
+                  <div class="ts-field-label">Discord User Token</div>
+                  <input type="password" id="ts-direct-token" class="ts-input ltr"
+                    value=""
+                    placeholder="${sel?.hasDirectToken ? `•••••• ${t('ts.direct_token_saved_ph')}` : t('ts.direct_token_ph')}"
+                    autocomplete="off" />
+                  ${sel?.hasDirectToken ? `<div class="ts-field-hint ok">${t('ts.direct_token_saved_hint')}</div>` : `<div class="ts-field-hint">${t('ts.direct_token_how')}</div>`}
+                </div>
+                <details class="ts-method-collapsible">
+                  <summary><span class="ts-method-badge email">${t('ts.method_b_badge')}</span><span class="ts-method-hint">${t('ts.method_b_hint')}</span><span class="ts-collapse-arrow"></span></summary>
+                  <div class="ts-form-grid ts-method-body">
+                    <div class="ts-field">
+                      <div class="ts-field-label">Email</div>
+                      <input type="email" id="ts-email" class="ts-input ltr" value="${escapeAttr(this.form.email)}" placeholder="name@example.com" autocomplete="off" />
+                    </div>
+                    <div class="ts-field">
+                      <div class="ts-field-label">Password</div>
+                      <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" />
+                    </div>
+                    <div class="ts-field ts-method-totp">
+                      <div class="ts-field-label">2FA Secret</div>
+                      <input type="text" id="ts-totp" class="ts-input totp" value="" placeholder="${sel?.hasTotp ? '••••••••' : '2FA secret'}" autocomplete="off" />
+                    </div>
+                  </div>
+                </details>
               </div>
             </div>
-          </details>
-        </div>
-
-        <!-- Bulk token import -->
-        ${this._renderBulkTokenCard()}
-
-        ${this._renderProfilesCard()}
-
-        <!-- Automation rules -->
-        <div class="ts-card ts-rules-card">
-          <div class="ts-card-head">
-            <div class="ts-card-title ar">قواعد التشغيل</div>
+            <aside class="ts-category-secondary ts-setup-tools">
+              ${this._renderProfilesCard()}
+              ${this._renderBulkTokenCard()}
+            </aside>
           </div>
-          ${this._renderToggle('createTeams', t('ts.rule_create_teams'))}
-          ${this._renderToggle('createBots', t('ts.rule_create_bots'))}
-          ${this._renderToggle('linkBots', t('ts.rule_link_bots'))}
-          ${this._renderTeamSelector()}
-          ${this._renderRuleHint()}
+        </section>
 
-          <div class="ts-form-grid" style="margin-top:14px;">
-            <div class="ts-field${!this.form.rules.createBots ? ' ts-field-muted' : ''}">
-              <div class="ts-field-label">${t('ts.quantity')}</div>
-              <input type="number" id="ts-count" class="ts-input numeric" min="1" max="50"
-                value="${this.form.count}" ${!this.form.rules.createBots ? 'disabled' : ''} />
+        <section class="ts-category" id="ts-cat-automation">
+          <div class="ts-category-heading">
+            <div><span class="ts-category-number">02</span><h2>${escapeHtml(t('ts.ui_automation') || 'التشغيل')}</h2></div>
+            <p>${escapeHtml(t('ts.ui_automation_desc') || 'رتّب خط سير التنفيذ ثم اختر السرعة والاتصال وابدأ من هنا.')}</p>
+          </div>
+          <div class="ts-category-grid ts-category-grid-automation">
+            <div class="ts-card ts-rules-card">
+              <div class="ts-card-head">
+                <div class="ts-card-title ar">قواعد التشغيل</div>
+                <span class="ts-card-step">PIPELINE</span>
+              </div>
+              ${this._renderToggle('createTeams', t('ts.rule_create_teams'))}
+              ${this._renderToggle('createBots', t('ts.rule_create_bots'))}
+              ${this._renderToggle('linkBots', t('ts.rule_link_bots'))}
+              ${this._renderTeamSelector()}
+              ${this._renderRuleHint()}
+              <div class="ts-form-grid" style="margin-top:14px;">
+                <div class="ts-field${!this.form.rules.createBots ? ' ts-field-muted' : ''}">
+                  <div class="ts-field-label">${t('ts.quantity')}</div>
+                  <input type="number" id="ts-count" class="ts-input numeric" min="1" max="50" value="${this.form.count}" ${!this.form.rules.createBots ? 'disabled' : ''} />
+                </div>
+                <div class="ts-field${!this.form.rules.createBots ? ' ts-field-muted' : ''}">
+                  <div class="ts-field-label">${t('ts.bot_prefix')}</div>
+                  <input type="text" id="ts-prefix" class="ts-input" value="${escapeAttr(this.form.prefix)}" maxlength="24" ${!this.form.rules.createBots ? 'disabled' : ''} />
+                </div>
+              </div>
+              <div class="ts-field${(!this.form.rules.createBots && !this.form.rules.createTeams) ? ' ts-field-muted' : ''}">
+                <div class="ts-field-label">${t('ts.wait_minutes')}</div>
+                <input type="number" id="ts-wait" class="ts-input numeric" min="0" max="60" value="${this.form.waitMinutes}" ${(!this.form.rules.createBots && !this.form.rules.createTeams) ? 'disabled' : ''} />
+              </div>
+              <div class="ts-field" style="margin-top:4px;">
+                <div class="ts-field-label">${t('ts.session_budget_label')}</div>
+                <input type="number" id="ts-session-budget" class="ts-input numeric" min="0" max="500" value="${this.form.sessionBudget}" title="${escapeAttr(t('ts.session_budget_hint'))}" />
+                <div class="ts-field-hint">${t('ts.session_budget_hint')}</div>
+              </div>
+              ${this._renderAdvancedOptions()}
             </div>
-            <div class="ts-field${!this.form.rules.createBots ? ' ts-field-muted' : ''}">
-              <div class="ts-field-label">${t('ts.bot_prefix')}</div>
-              <input type="text" id="ts-prefix" class="ts-input"
-                value="${escapeAttr(this.form.prefix)}" maxlength="24"
-                ${!this.form.rules.createBots ? 'disabled' : ''} />
+            <div class="ts-card ts-action-panel">
+              <div class="ts-card-head">
+                <div class="ts-card-title ar">التحكم في الجلسة</div>
+                <span class="ts-card-step">RUN / PAUSE / STOP</span>
+              </div>
+              <div class="ts-action-intro">${escapeHtml(t('ts.ui_action_desc') || 'نفّذ الفحص المسبق ثم شغّل الجلسة وتابع حالتها من الأعلى.')}</div>
+              <div class="ts-actions">
+                <button class="ts-btn danger big" id="ts-stop" ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>إيقاف</button>
+                <button class="ts-btn big ts-pause-btn" id="ts-pause" ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>${s.state === 'paused' ? 'استئناف' : 'توقف مؤقت'}</button>
+                <button class="ts-btn mint big" id="ts-start" ${['running', 'waiting', 'paused'].includes(s.state) || this._sessionStartInFlight ? 'disabled' : ''}>${t('ts.start_session')}</button>
+              </div>
             </div>
           </div>
-          <div class="ts-field${(!this.form.rules.createBots && !this.form.rules.createTeams) ? ' ts-field-muted' : ''}">
-            <div class="ts-field-label">${t('ts.wait_minutes')}</div>
-            <input type="number" id="ts-wait" class="ts-input numeric" min="0" max="60"
-              value="${this.form.waitMinutes}"
-              ${(!this.form.rules.createBots && !this.form.rules.createTeams) ? 'disabled' : ''} />
+        </section>
+
+        <section class="ts-category" id="ts-cat-assets">
+          <div class="ts-category-heading">
+            <div><span class="ts-category-number">03</span><h2>${escapeHtml(t('ts.ui_assets') || 'الهوية والحماية')}</h2></div>
+            <p>${escapeHtml(t('ts.ui_assets_desc') || 'خصص شكل البوتات واضبط الحماية فقط عند الحاجة.')}</p>
           </div>
-          <div class="ts-field" style="margin-top:4px;">
-            <div class="ts-field-label">${t('ts.session_budget_label')}</div>
-            <input type="number" id="ts-session-budget" class="ts-input numeric" min="0" max="500"
-              value="${this.form.sessionBudget}"
-              title="${escapeAttr(t('ts.session_budget_hint'))}" />
-            <div class="ts-field-hint">${t('ts.session_budget_hint')}</div>
+          <div class="ts-category-grid ts-category-grid-assets">
+            <div>${this._renderPfpSection()}</div>
+            <div>${this._renderCaptchaSettings()}</div>
           </div>
-          ${this._renderAdvancedOptions()}
-        </div>
+        </section>
 
-        <!-- Saved bot profile media -->
-        ${this._renderPfpSection()}
-
-        <!-- Captcha solver settings -->
-        ${this._renderCaptchaSettings()}
-
-        <!-- Action buttons -->
-        <div class="ts-actions">
-          <button class="ts-btn danger big" id="ts-stop"
-            ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>إيقاف</button>
-          <button class="ts-btn big ts-pause-btn" id="ts-pause"
-            ${!['running', 'waiting', 'paused'].includes(s.state) ? 'disabled' : ''}>
-            ${s.state === 'paused' ? 'استئناف' : 'توقف مؤقت'}
-          </button>
-          <button class="ts-btn mint big" id="ts-start"
-            ${['running', 'waiting', 'paused'].includes(s.state) || this._sessionStartInFlight ? 'disabled' : ''}>${t('ts.start_session')}</button>
-        </div>
-
-        <!-- Live log -->
-        <div class="ts-log-wrap ts-secondary-section">
-          ${this._renderLogToolbar(s.log || [])}
-          <div class="ts-log" id="ts-log">${this._renderLog(s.log || [])}</div>
-        </div>
-
-        <!-- Library trigger button — opens a full-screen overlay with four
-             tabs: Teams / Personal apps / Created bots / Bot Tokens. -->
-        <div id="ts-lib-trigger">${this._renderLibraryTrigger(s)}</div>
+        <section class="ts-category" id="ts-cat-reports">
+          <div class="ts-category-heading">
+            <div><span class="ts-category-number">04</span><h2>${escapeHtml(t('ts.ui_reports') || 'السجل والمكتبة')}</h2></div>
+            <p>${escapeHtml(t('ts.ui_reports_desc') || 'راجع النتائج الحية، وافتح المكتبة لإدارة البوتات والتقارير.')}</p>
+          </div>
+          <div class="ts-category-grid ts-category-grid-reports">
+            <div class="ts-log-wrap ts-secondary-section">
+              ${this._renderLogToolbar(s.log || [])}
+              <div class="ts-log" id="ts-log">${this._renderLog(s.log || [])}</div>
+            </div>
+            <div class="ts-report-launcher">
+              <div class="ts-report-launcher-icon">${icon('layers')}</div>
+              <div class="ts-report-launcher-copy"><strong>${escapeHtml(t('ts.lib_title') || 'المكتبة')}</strong><span>${escapeHtml(t('ts.lib_btn_sub') || 'التيمات · التطبيقات · البوتات المنشأة')}</span></div>
+              <div id="ts-lib-trigger">${this._renderLibraryTrigger(s)}</div>
+            </div>
+          </div>
+        </section>
       </div>
     `;
     this._bind();
@@ -1309,9 +1352,8 @@ export class TrueStudioManager {
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
             ${bd.enabled ? `
-              <button id="ts-quick-setup" class="ts-btn"
-                style="font-size:10px;padding:3px 8px;${qsOpen ? 'background:#5865f2;' : ''}">
-                ${icon('bolt', 'ts-inline-icon')} Quick Setup${qsOpen ? ' ▲' : ' ▼'}
+              <button id="ts-quick-setup" class="ts-btn ts-quick-setup-btn${qsOpen ? ' is-open' : ''}">
+                ${icon('bolt', 'ts-inline-icon')} إعداد سريع <span class="ts-quick-arrow">${qsOpen ? '↑' : '↓'}</span>
               </button>
             ` : ''}
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;">
