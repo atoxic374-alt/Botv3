@@ -206,6 +206,7 @@ const ts = require('./lib/trueStudio');
       current: s.current,
       teamId: s.teamId,
       teamName: s.teamName,
+      createdTeams: Array.isArray(s.createdTeams) ? s.createdTeams.map(t => ({ id: t.id, name: t.name, confirmed: t.confirmed === true })) : [],
       waitUntilTs: s.waitUntilTs,
       waitTotalMs: s.waitTotalMs,
       accountRateLimits: s.accountRateLimits || {},
@@ -281,6 +282,12 @@ const ts = require('./lib/trueStudio');
     return list.find(a => a.email && a.email.toLowerCase() === String(email || '').toLowerCase()) || null;
   }
 
+  // Bulk-token imports use generated local identifiers and intentionally do
+  // not represent a normal email/password account.
+  function isTsBulkTokenAccount(email) {
+    return /^tok-\d+@local$/i.test(String(email || '').trim());
+  }
+
   function tsDecryptAccount(rec) {
     if (!rec) return null;
     return {
@@ -337,6 +344,9 @@ const ts = require('./lib/trueStudio');
     const acct = tsFindAccount(email);
     if (!acct) throw new Error('Account not found — save it first');
     const creds = tsDecryptAccount(acct);
+    if (!isTsBulkTokenAccount(creds.email) && !creds.password) {
+      throw new Error('Password is required for this account, even when using a direct token');
+    }
 
     // ── Option A: Direct token (warm client, skip login) ──────────
     if (creds.directToken) {
@@ -1249,19 +1259,29 @@ const ts = require('./lib/trueStudio');
     if (!email || typeof email !== 'string') return fail(res, new Error('Email is required'));
     const cleanEmail = email.trim().toLowerCase();
     if (cleanEmail.length > 254 || !cleanEmail.includes('@')) return fail(res, new Error('Invalid email'));
-    if (password && typeof password !== 'string') return fail(res, new Error('Password must be a string'));
+    if (password !== undefined && typeof password !== 'string') return fail(res, new Error('Password must be a string'));
     if (totpSecret && !ts.isValidTotpSecret(totpSecret)) return fail(res, new Error('Invalid 2FA secret (must be a base32 string)'));
     if (directToken && typeof directToken !== 'string') return fail(res, new Error('Token must be a string'));
 
     const d = ensureData();
     if (!Array.isArray(d.tsAccounts)) d.tsAccounts = [];
     let rec = tsFindAccount(cleanEmail);
+    const existingPassword = rec ? tsDecryptAccount(rec)?.password || '' : '';
+    const incomingPassword = typeof password === 'string' ? password : '';
+    const hasIncomingPassword = incomingPassword.trim().length > 0;
+    // A direct token does not bypass the account-password requirement. For an
+    // existing account, an already-saved password may be kept by omitting the
+    // field; a new account (or a legacy account without one) must provide it.
+    if (!hasIncomingPassword && !existingPassword.trim()) {
+      return fail(res, new Error('Password is required, even when a direct token is provided'));
+    }
     if (!rec) {
       rec = { email: cleanEmail, password: '', totpSecret: '', directToken: '', addedAt: Date.now() };
       d.tsAccounts.push(rec);
     }
-    if (typeof password === 'string' && password) rec.password = encrypt(password);
-    else if (password === '') rec.password = '';
+    if (hasIncomingPassword) rec.password = encrypt(incomingPassword);
+    // An empty password never clears the only saved credential. Passwords are
+    // intentionally retained when the user edits only the token or 2FA field.
     if (typeof totpSecret === 'string' && totpSecret) rec.totpSecret = encrypt(totpSecret.replace(/\s+/g, ''));
     else if (totpSecret === '') rec.totpSecret = '';
     if (typeof directToken === 'string' && directToken.trim()) rec.directToken = encrypt(directToken.trim());
@@ -1618,6 +1638,8 @@ const ts = require('./lib/trueStudio');
       rules: { createTeams: !!rules.createTeams, createBots: !!rules.createBots, linkBots: !!rules.linkBots },
       count: Math.max(1, Math.min(50, parseInt(input.count) || 1)),
       prefix: String(input.prefix || 'Bot').slice(0, 24).trim() || 'Bot',
+      teamName: String(input.teamName || '').slice(0, 32).trim(),
+      teamCount: Math.max(1, Math.min(30, parseInt(input.teamCount) || 1)),
       waitMinutes: Math.max(0, Math.min(60, parseInt(input.waitMinutes) || 0)),
       proxyUrl: typeof input.proxyUrl === 'string' ? input.proxyUrl.slice(0, 20000) : '',
       speed: ['medium', 'fast', 'veryfast', 'ultra'].includes(input.speed) ? input.speed : 'medium',
@@ -1690,11 +1712,14 @@ const ts = require('./lib/trueStudio');
         { key: 'account', label: 'الحساب موجود', ok: !!acct, detail: acct ? 'تم العثور على الحساب' : 'اختر حساباً محفوظاً' },
         { key: 'credentials', label: 'بيانات الدخول', ok: !!(creds?.password || creds?.directToken), detail: creds ? 'بيانات الاعتماد موجودة' : 'لا يمكن الفحص قبل اختيار الحساب' },
         { key: 'rules', label: 'قواعد الجلسة', ok: !!(cfg.rules.createTeams || cfg.rules.createBots || cfg.rules.linkBots) && !(cfg.rules.linkBots && !cfg.rules.createBots), detail: cfg.rules.linkBots && !cfg.rules.createBots ? 'الربط يحتاج إنشاء البوتات' : 'القواعد متوافقة' },
+        { key: 'credentials_password', label: 'كلمة المرور', ok: !!creds?.password, detail: creds?.password ? 'كلمة المرور محفوظة' : 'كلمة المرور مطلوبة حتى مع التوكن المباشر' },
         { key: 'count', label: 'الكمية', ok: !cfg.rules.createBots || cfg.count >= 1, detail: `${cfg.count} بوت كحد أقصى لهذه الجلسة` },
+        { key: 'team_input', label: 'إعداد التيمات', ok: !cfg.rules.createTeams || (!!cfg.teamName && cfg.teamCount >= 1 && cfg.teamCount <= 30), detail: cfg.rules.createTeams ? `${cfg.teamCount} تيم باسم ${cfg.teamName || 'غير محدد'}` : 'إنشاء التيمات غير مفعّل' },
+        { key: 'team_2fa', label: '2FA للتيمات', ok: !cfg.rules.createTeams || (!!creds?.totpSecret && acct?.verify?.ok === true && acct?.verify?.mfaEnabled === true), detail: !cfg.rules.createTeams ? 'غير مطلوب' : (!creds?.totpSecret ? 'أضف سر TOTP واختبر الحساب' : (acct?.verify?.mfaEnabled === true ? '2FA مؤكد' : 'اختبر الحساب لتأكيد 2FA')) },
         { key: 'proxy', label: 'إعداد البروكسي', ok: !cfg.brightData.enabled || !!(cfg.brightData.customerId && cfg.brightData.zoneName), detail: cfg.brightData.enabled ? 'بيانات Bright Data الأساسية موجودة' : 'بدون Bright Data' },
       ];
       const passed = checks.every(c => c.ok);
-      ok(res, { ok: passed, checks, plan: { account: email || null, steps: [cfg.rules.createTeams && 'إنشاء أو تجهيز التيم', cfg.rules.createBots && `إنشاء ${cfg.count} بوت`, cfg.rules.linkBots && 'ربط البوتات بالتيم', 'حفظ التوكنات والتقرير'].filter(Boolean) } });
+      ok(res, { ok: passed, checks, plan: { account: email || null, steps: [cfg.rules.createTeams && `إنشاء ${cfg.teamCount} تيم باسم ${cfg.teamName || 'غير محدد'}`, cfg.rules.createBots && `إنشاء ${cfg.count} بوت`, cfg.rules.linkBots && 'ربط البوتات بالتيم', 'حفظ التوكنات والتقرير'].filter(Boolean) } });
     } catch (e) { fail(res, e); }
   });
 
@@ -1880,6 +1905,7 @@ const ts = require('./lib/trueStudio');
     if (!acct) return fail(res, new Error('Account not found'));
     const creds = tsDecryptAccount(acct);
     if (!creds.password && !creds.directToken) return fail(res, new Error('Saved account has no password and no direct token — re-save it'));
+    if (!isTsBulkTokenAccount(creds.email) && !creds.password) return fail(res, new Error('Password is required for this account, even when using a direct token'));
     try {
       const client = ts.createClient();
       const netOpts = { solveCaptcha: buildSolveCaptcha(), client };
@@ -1947,6 +1973,7 @@ const ts = require('./lib/trueStudio');
           status: verify.status,
           message: verify.message,
           mfa: verify.mfa,
+          mfaEnabled: verify.user?.mfa_enabled === true,
           username: verify.user?.username || '',
           userId: verify.user?.id || '',
           at: verify.at,
@@ -2281,13 +2308,21 @@ const ts = require('./lib/trueStudio');
   app.post('/api/ts/teams/create', async (req, res) => {
     const email = String(req.body?.email || '').toLowerCase().trim();
     const name = String(req.body?.name || '').trim().slice(0, 32);
+    const requestedCount = Number(req.body?.count ?? 1);
+    const count = Number.isInteger(requestedCount) ? requestedCount : 0;
     if (!email || !name) return fail(res, new Error('email and name are required'));
-    if (!tsFindAccount(email)) return fail(res, new Error('Account not found — save it first'));
+    if (count < 1 || count > 30) return fail(res, new Error('Team count must be between 1 and 30'));
+    const acct = tsFindAccount(email);
+    if (!acct) return fail(res, new Error('Account not found — save it first'));
+    const creds = tsDecryptAccount(acct);
     try {
-      const team = await enqueueTsAccount(email, async () => {
+      const teams = await enqueueTsAccount(email, async () => {
         const { token, client } = await tsGetToken(email);
         const rateLimiter = makeTsRateLimiter('create-team', null, { minimumGapMs: 900, account: email });
-        const netOpts = { solveCaptcha: buildSolveCaptcha(), client, rateLimiter, captchaContext: 'create-team' };
+        const netOpts = {
+          solveCaptcha: buildSolveCaptcha(), client, rateLimiter, captchaContext: 'create-team',
+          password: creds.password || undefined, totpSecret: creds.totpSecret || undefined,
+        };
         // Warm the portal before the mutation; a failed warm-up must not be hidden.
         if (!client.devPortalLoaded) {
           await ts.simulateBrowsing({ token, netOpts });
@@ -2302,20 +2337,56 @@ const ts = require('./lib/trueStudio');
           err.rateLimit = health;
           throw err;
         }
+        if (!creds.totpSecret) {
+          const err = new Error('Creating teams requires 2FA. Save the account TOTP secret first.');
+          err.code = 'TWO_FACTOR_REQUIRED';
+          throw err;
+        }
+        const me = await ts.getCurrentUser({ token, netOpts });
+        if (me?.mfa_enabled !== true) {
+          const err = new Error('This account does not have 2FA enabled. Team creation is blocked.');
+          err.code = 'TWO_FACTOR_NOT_ENABLED';
+          throw err;
+        }
+        const mfaToken = await ts.acquireMfa({ token, totpSecret: creds.totpSecret, netOpts });
+        if (!mfaToken) {
+          const err = new Error('2FA could not be verified with the saved TOTP secret.');
+          err.code = 'MFA_REQUIRED';
+          throw err;
+        }
+        const currentTeams = await ts.listTeams({ token, netOpts });
+        if (currentTeams.length + count > 30) {
+          const err = new Error(`Team limit would be exceeded: ${currentTeams.length} existing + ${count} requested (maximum 30)`);
+          err.code = 'TEAM_LIMIT_REACHED';
+          throw err;
+        }
         await ts.navigateTo({ client, page: 'https://discord.com/developers/teams' });
         await ts.humanDelay(600, 1400);
-        const created = await ts.createTeam({ token, name, netOpts });
-        const teams = await ts.listTeams({ token, netOpts });
-        const verified = teams.find(t => String(t?.id || '') === String(created.id));
-        if (!verified) {
-          const err = new Error('Team creation was not confirmed by Discord');
+        const createdTeams = [];
+        for (let i = 0; i < count; i++) {
+          const suffix = `-${i + 1}`;
+          const numberedName = count === 1 ? name : `${name.slice(0, 32 - suffix.length)}${suffix}`;
+          const created = await ts.createTeam({ token, name: numberedName, netOpts });
+          createdTeams.push(created);
+          await ts.humanDelay(600, 1400);
+        }
+        const afterTeams = await ts.listTeams({ token, netOpts });
+        const verified = createdTeams.map(created => afterTeams.find(t => String(t?.id || '') === String(created.id))).filter(Boolean);
+        if (verified.length !== createdTeams.length) {
+          const err = new Error(`Only ${verified.length} of ${createdTeams.length} created teams were confirmed by Discord`);
           err.code = 'TEAM_NOT_CONFIRMED';
+          err.partialTeams = verified;
           throw err;
         }
         return verified;
-      }, { label: 'Create team' });
-      ok(res, { team: { id: team.id, name: team.name, icon: team.icon || null, confirmed: true } });
-    } catch (e) { fail(res, e); }
+      }, { label: 'Create teams' });
+      ok(res, {
+        teams: teams.map(team => ({ id: team.id, name: team.name, icon: team.icon || null, confirmed: true })),
+        count: teams.length,
+      });
+    } catch (e) {
+      fail(res, e);
+    }
   });
 
   // Transfer an existing application to a team.
@@ -2757,23 +2828,36 @@ const ts = require('./lib/trueStudio');
     if (s.state === 'running' || s.state === 'waiting' || s.state === 'paused') {
       return fail(res, new Error('A session is already running'));
     }
-    const { email, rules, count, prefix, waitMinutes, proxyUrl, speed, selectedTeamId, brightData } = req.body || {};
+    const { email, rules, count, prefix, teamName, teamCount, waitMinutes, proxyUrl, speed, selectedTeamId, brightData } = req.body || {};
     const acct = tsFindAccount(email);
     if (!acct) return fail(res, new Error('Account not found — save it first'));
     const creds = tsDecryptAccount(acct);
     if (!creds.password && !creds.directToken) return fail(res, new Error('Saved account has no password and no direct token — re-save it'));
+    if (!isTsBulkTokenAccount(creds.email) && !creds.password) return fail(res, new Error('Password is required for this account, even when using a direct token'));
 
     const r = {
       createTeams: !!(rules && rules.createTeams),
       createBots:  !!(rules && rules.createBots),
       linkBots:    !!(rules && rules.linkBots),
     };
-     if (r.linkBots && !r.createBots) {
-       return fail(res, new Error('Link Bots requires Create Bots in the automation session'));
-     }
+    if (r.linkBots && !r.createBots) {
+      return fail(res, new Error('Link Bots requires Create Bots in the automation session'));
+    }
+    if (r.createTeams) {
+      if (!creds.totpSecret) return fail(res, new Error('Creating teams requires 2FA. Save the account TOTP secret first.'));
+      if (acct.verify?.ok !== true || acct.verify?.mfaEnabled !== true) {
+        return fail(res, new Error('2FA is not confirmed for this account. Test the account before creating teams.'));
+      }
+    }
     const n = Math.max(1, Math.min(50, parseInt(count) || 1));
     const wait = Math.max(0, Math.min(60, parseInt(waitMinutes) || 0));
     const pfx = String(prefix || 'Bot').slice(0, 24).trim() || 'Bot';
+    const requestedTeamCount = Number(teamCount ?? 1);
+    const teamTotal = Number.isInteger(requestedTeamCount) ? requestedTeamCount : 0;
+    const requestedTeamName = String(teamName || '').trim().slice(0, 32);
+    if (r.createTeams && (!requestedTeamName || teamTotal < 1 || teamTotal > 30)) {
+      return fail(res, new Error('Team name is required and team count must be between 1 and 30'));
+    }
     const rawProxy = typeof proxyUrl === 'string' ? proxyUrl : '';
     const proxyList = rawProxy.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
     const speedMap = { medium: 1.0, fast: 0.4, veryfast: 0.15, ultra: 0.05 };
@@ -2809,7 +2893,7 @@ const ts = require('./lib/trueStudio');
     s.state = 'running';
     s.pauseRequested = false;
     s.log = [];
-    const sessionConfig = { email: creds.email, rules: r, count: n, prefix: pfx, waitMinutes: wait, proxyUrl: rawProxy ? encrypt(rawProxy) : '', proxyUrlEncrypted: !!rawProxy, speed, selectedTeamId: selTeamId, brightData: bd ? { enabled: true, customerId: bd.customerId, zoneName: bd.zoneName, protocol: bd.protocol } : null, batchSize: Math.max(1, Math.min(5, parseInt(req.body?.batchSize) || 1)), sessionBudget: Math.max(0, Math.min(500, parseInt(req.body?.sessionBudget) || 0)) };
+    const sessionConfig = { email: creds.email, rules: r, count: n, prefix: pfx, teamName: requestedTeamName, teamCount: teamTotal, waitMinutes: wait, proxyUrl: rawProxy ? encrypt(rawProxy) : '', proxyUrlEncrypted: !!rawProxy, speed, selectedTeamId: selTeamId, brightData: bd ? { enabled: true, customerId: bd.customerId, zoneName: bd.zoneName, protocol: bd.protocol } : null, batchSize: Math.max(1, Math.min(5, parseInt(req.body?.batchSize) || 1)), sessionBudget: Math.max(0, Math.min(500, parseInt(req.body?.sessionBudget) || 0)) };
     const sessionData = ensureData();
     sessionData.tsLastSession = { state: 'running', config: sessionConfig, done: 0, failed: 0, startedAt: s.startedAt, updatedAt: Date.now() };
     writeData(sessionData);
@@ -2832,7 +2916,7 @@ const ts = require('./lib/trueStudio');
         pushTsEvent('ts_progress');
       }
       const sessionBudget = Math.max(0, parseInt(req.body?.sessionBudget) || 0);
-      return runTsSession({ creds, rules: r, count: n, prefix: pfx, waitMinutes: wait, proxyList, speedFactor, selectedTeamId: selTeamId, brightData: bd, batchSize, sessionBudget });
+      return runTsSession({ creds, rules: r, count: n, prefix: pfx, teamName: requestedTeamName, teamCount: teamTotal, waitMinutes: wait, proxyList, speedFactor, selectedTeamId: selTeamId, brightData: bd, batchSize, sessionBudget });
     }, { label: 'Create bots session' })
       .catch(e => {
         const ses = tsSession();
@@ -2865,7 +2949,7 @@ const ts = require('./lib/trueStudio');
     return `http://${user}:${pass}@${host}:33335`;
   }
 
-  async function runTsSession({ creds, rules, count, prefix, waitMinutes, proxyList = [], speedFactor = 1.0, selectedTeamId, brightData: bd = null, batchSize: requestedBatchSize = 1, sessionBudget = 0 }) {
+  async function runTsSession({ creds, rules, count, prefix, teamName = '', teamCount = 1, waitMinutes, proxyList = [], speedFactor = 1.0, selectedTeamId, brightData: bd = null, batchSize: requestedBatchSize = 1, sessionBudget = 0 }) {
     const s = tsSession();
     try {
       // Reuse the token + warmed client cached by Test/verify so cookies and
@@ -3210,6 +3294,26 @@ const ts = require('./lib/trueStudio');
         tsLog('info', 'الحساب بدون 2FA — تخطي خطوة MFA');
       }
 
+      if (rules.createTeams) {
+        if (!creds.totpSecret) {
+          const err = new Error('إنشاء التيمات يتطلب تفعيل 2FA وحفظ سر TOTP للحساب');
+          err.code = 'TWO_FACTOR_REQUIRED';
+          throw err;
+        }
+        const currentUser = await ts.getCurrentUser({ token, netOpts });
+        if (currentUser?.mfa_enabled !== true) {
+          const err = new Error('الحساب لا يملك 2FA مفعّلاً — تم منع إنشاء التيمات');
+          err.code = 'TWO_FACTOR_NOT_ENABLED';
+          throw err;
+        }
+        if (!mfaToken) {
+          const err = new Error('تعذر التحقق من 2FA باستخدام سر TOTP المحفوظ');
+          err.code = 'MFA_REQUIRED';
+          throw err;
+        }
+        tsLog('success', 'تم تأكيد تفعيل 2FA وMFA قبل إنشاء التيمات', { operation: 'team_2fa_check', confirmed: true, stage: 'complete' });
+      }
+
       // ─────────────────────────────────────────────────────────
       // 1) Team setup — create new team OR load existing teams
       // ─────────────────────────────────────────────────────────
@@ -3227,31 +3331,68 @@ const ts = require('./lib/trueStudio');
 
       if (rules.createTeams) {
         if (s.cancelRequested) return finalizeTs();
-        const teamName = prefix.length >= 2 ? prefix : (prefix + '-Team');
+        const requestedName = String(teamName || '').trim().slice(0, 32);
+        const requestedCount = Number.isInteger(Number(teamCount)) ? Number(teamCount) : 0;
+        if (!requestedName || requestedCount < 1 || requestedCount > 30) {
+          throw Object.assign(new Error('اسم التيم مطلوب وعدد التيمات يجب أن يكون بين 1 و30'), { code: 'TEAM_INPUT_INVALID' });
+        }
         await ts.navigateTo({ client, page: 'https://discord.com/developers/teams' });
         await ts.humanDelay(700, 1800, speedFactor);
-        // Fetch existing teams so we can include them in rotation if the new one fills up
-         let existingTeams = [];
-         try {
-           const listedTeams = await ts.listTeams({ token, netOpts });
-           // Transfer requires ownership; member teams must not be offered as
-           // rotation targets because they will fail later and waste a bot.
-           const ownedTeams = listedTeams.filter(t =>
-             t && (t.owner_user_id === s.currentUserId || t.isOwner === true)
-           );
-           existingTeams = await loadTeamCounts(ownedTeams);
-         } catch (_) {}
-        await ts.humanDelay(900, 2200, speedFactor);
-        tsLog('info', 'إنشاء تيم جديد: ' + teamName);
-        const team = await ts.createTeam({ token, name: teamName, netOpts });
-        s.teamId = teamId = team.id;
-        s.teamName = team.name;
-        teamAppCounts[team.id] = 0;
-        tsLog('success', 'تم إنشاء التيم #' + team.id);
-        // Include existing teams in rotation (after the new one)
-        availableTeams = [{ id: team.id, name: team.name, appCount: 0 }, ...existingTeams.filter(t => t.id !== team.id).map(t => ({ id: t.id, name: t.name, appCount: t.appCount || 0 }))];
+        // Fetch existing teams so we can fail before POST when the account
+        // would exceed Discord's team limit, and reuse owned teams for rotation.
+        let listedTeams = [];
+        try {
+          listedTeams = await ts.listTeams({ token, netOpts });
+        } catch (e) {
+          throw new Error('تعذر التحقق من عدد التيمات الحالية: ' + (e.message || e));
+        }
+        if (listedTeams.length + requestedCount > 30) {
+          throw Object.assign(
+            new Error(`لا يمكن إنشاء ${requestedCount} تيم: لدى الحساب ${listedTeams.length} من أصل 30`),
+            { code: 'TEAM_LIMIT_REACHED' },
+          );
+        }
+        const ownedTeams = listedTeams.filter(t =>
+          t && (t.owner_user_id === s.currentUserId || t.isOwner === true)
+        );
+        const existingTeams = await loadTeamCounts(ownedTeams);
+        const createdTeams = [];
+        for (let teamIndex = 0; teamIndex < requestedCount; teamIndex++) {
+          if (s.cancelRequested) return finalizeTs();
+          const suffix = `-${teamIndex + 1}`;
+          const currentName = requestedCount === 1
+            ? requestedName
+            : `${requestedName.slice(0, 32 - suffix.length)}${suffix}`;
+          await ts.humanDelay(900, 2200, speedFactor);
+          tsLog('info', `إنشاء التيم ${teamIndex + 1}/${requestedCount}: ${currentName}`, { operation: 'create_team', stage: 'request', confirmed: false });
+          const created = await ts.createTeam({ token, name: currentName, netOpts });
+          createdTeams.push(created);
+          tsLog('info', `استلمنا رد إنشاء التيم ${teamIndex + 1}/${requestedCount}: ${created.name || currentName} — بانتظار التأكيد`, { operation: 'create_team', stage: 'response', confirmed: false, teamId: created.id });
+        }
+        const afterTeams = await ts.listTeams({ token, netOpts });
+        const confirmedTeams = createdTeams
+          .map(created => afterTeams.find(t => String(t?.id || '') === String(created.id)))
+          .filter(Boolean);
+        if (confirmedTeams.length !== createdTeams.length) {
+          const missing = createdTeams.filter(created => !confirmedTeams.some(team => String(team.id) === String(created.id))).map(team => team.name || team.id);
+          throw Object.assign(
+            new Error(`تم تأكيد ${confirmedTeams.length} من ${createdTeams.length} تيم فقط. غير المؤكد: ${missing.join(', ')}`),
+            { code: 'TEAM_NOT_CONFIRMED', partialTeams: confirmedTeams },
+          );
+        }
+        s.createdTeams = confirmedTeams.map(team => ({ id: team.id, name: team.name, confirmed: true }));
+        const firstTeam = confirmedTeams[0];
+        s.teamId = teamId = firstTeam.id;
+        s.teamName = firstTeam.name;
+        for (const created of confirmedTeams) teamAppCounts[created.id] = 0;
+        // Include existing owned teams in rotation after the newly-created set.
+        availableTeams = [
+          ...confirmedTeams.map(team => ({ id: team.id, name: team.name, appCount: 0 })),
+          ...existingTeams.filter(t => !confirmedTeams.some(created => String(created.id) === String(t.id))).map(t => ({ id: t.id, name: t.name, appCount: t.appCount || 0 })),
+        ];
         for (const existing of existingTeams) teamAppCounts[existing.id] = existing.appCount || 0;
-        await ts.navigateTo({ client, page: `https://discord.com/developers/teams/${team.id}` });
+        tsLog('success', `تم تأكيد إنشاء ${confirmedTeams.length}/${requestedCount} تيم`, { operation: 'create_team', stage: 'complete', confirmed: true, teamCount: confirmedTeams.length });
+        await ts.navigateTo({ client, page: `https://discord.com/developers/teams/${firstTeam.id}` });
         await ts.humanDelay(1200, 2800, speedFactor);
         pushTsEvent('ts_progress');
       } else if (rules.linkBots) {

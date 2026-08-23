@@ -122,7 +122,7 @@ window.electronAPI = {
     typeof payload === 'string' ? { proxyUrl: payload } : (payload || {})),
   tsProxyPreflight: (payload) => apiCall('POST', '/api/ts/proxy-preflight', payload || {}),
   tsListTeams: (email) => apiCall('GET', `/api/ts/teams?email=${encodeURIComponent(email)}`),
-  tsCreateTeam: (email, name) => apiCall('POST', '/api/ts/teams/create', { email, name }),
+  tsCreateTeam: (email, name, count = 1) => apiCall('POST', '/api/ts/teams/create', { email, name, count }),
   tsAddAppToTeam: (email, appId, teamId) =>
     apiCall('POST', `/api/ts/teams/${encodeURIComponent(teamId)}/add-app`, { email, appId }),
   tsResetAllStart: (email, bots) => apiCall('POST', '/api/ts/reset-all/start', { email, bots }),

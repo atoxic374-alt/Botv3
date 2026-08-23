@@ -30,6 +30,13 @@ async function json(path, options) {
   const unknownLibrary = await json('/api/ts/library?email=smoke%40invalid.test');
   assert.equal(unknownLibrary.body?.success, false, 'library with unknown account should fail safely');
 
+  const tokenWithoutPassword = await json('/api/ts/accounts', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'smoke-token-only@example.invalid', directToken: 'fake-token' }),
+  });
+  assert.equal(tokenWithoutPassword.body?.success, false, 'direct token account without password should be rejected');
+  assert.match(tokenWithoutPassword.body?.error || '', /Password is required/i, 'password requirement should be explicit');
+
   const teamsWithoutEmail = await json('/api/ts/teams');
   assert.equal(teamsWithoutEmail.body?.success, false, 'teams without account should fail safely');
 
@@ -38,6 +45,13 @@ async function json(path, options) {
     body: JSON.stringify({ email: 'smoke@invalid.test', name: 'Smoke Team' }),
   });
   assert.equal(createTeamWithoutAccount.body?.success, false, 'team creation without saved account should fail safely');
+
+  const invalidTeamCount = await json('/api/ts/teams/create', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'smoke@invalid.test', name: 'Smoke Team', count: 31 }),
+  });
+  assert.equal(invalidTeamCount.body?.success, false, 'team count above Discord limit should be rejected');
+  assert.match(invalidTeamCount.body?.error || '', /between 1 and 30/i, 'team count error should be explicit');
 
   const addAppInvalid = await json('/api/ts/teams/team/add-app', {
     method: 'POST', headers: { 'content-type': 'application/json' },

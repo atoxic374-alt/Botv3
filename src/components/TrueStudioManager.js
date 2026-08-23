@@ -28,6 +28,8 @@ export class TrueStudioManager {
       rules: { createTeams: false, createBots: true, linkBots: false },
       count: 10,
       prefix: 'True-Studio',
+      teamName: 'Botv3 Team',
+      teamCount: 1,
       waitMinutes: 15,
       proxyUrl: '',
       speed: 'medium',
@@ -510,16 +512,17 @@ export class TrueStudioManager {
                     autocomplete="off" />
                   ${sel?.hasDirectToken ? `<div class="ts-field-hint ok">${t('ts.direct_token_saved_hint')}</div>` : `<div class="ts-field-hint">${t('ts.direct_token_how')}</div>`}
                 </div>
-                <details class="ts-method-collapsible">
+                <details class="ts-method-collapsible" open>
                   <summary><span class="ts-method-badge email">${t('ts.method_b_badge')}</span><span class="ts-method-hint">${t('ts.method_b_hint')}</span><span class="ts-collapse-arrow"></span></summary>
                   <div class="ts-form-grid ts-method-body">
                     <div class="ts-field">
                       <div class="ts-field-label">Email</div>
                       <input type="email" id="ts-email" class="ts-input ltr" value="${escapeAttr(this.form.email)}" placeholder="name@example.com" autocomplete="off" />
                     </div>
-                    <div class="ts-field">
-                      <div class="ts-field-label">Password</div>
-                      <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" />
+                    <div class="ts-field ts-required-field">
+                      <div class="ts-field-label">Password <span class="ts-required-mark" aria-hidden="true">*</span></div>
+                      <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" aria-required="true" />
+                      <div class="ts-field-hint">${escapeHtml(t('ts.password_saved_hint'))}</div>
                     </div>
                     <div class="ts-field ts-method-totp">
                       <div class="ts-field-label">2FA Secret</div>
@@ -548,6 +551,7 @@ export class TrueStudioManager {
                 <span class="ts-card-step">PIPELINE</span>
               </div>
               ${this._renderToggle('createTeams', t('ts.rule_create_teams'))}
+              ${this._renderTeamCreationFields()}
               ${this._renderToggle('createBots', t('ts.rule_create_bots'))}
               ${this._renderToggle('linkBots', t('ts.rule_link_bots'))}
               ${this._renderTeamSelector()}
@@ -783,6 +787,7 @@ export class TrueStudioManager {
   _profileConfig() {
     return {
       rules: { ...this.form.rules }, count: this.form.count, prefix: this.form.prefix,
+      teamName: this.form.teamName, teamCount: this.form.teamCount,
       waitMinutes: this.form.waitMinutes, proxyUrl: this.form.proxyUrl, speed: this.form.speed,
       selectedTeamId: this.form.selectedTeamId, brightData: this.form.brightData,
       batchSize: this.form.batchSize, sessionBudget: this.form.sessionBudget,
@@ -792,7 +797,7 @@ export class TrueStudioManager {
   _applyProfile(profile) {
     const c = profile?.config || {};
     if (c.rules) this.form.rules = { ...this.form.rules, ...c.rules };
-    for (const key of ['count', 'prefix', 'waitMinutes', 'proxyUrl', 'speed', 'selectedTeamId', 'batchSize', 'sessionBudget']) {
+    for (const key of ['count', 'prefix', 'teamName', 'teamCount', 'waitMinutes', 'proxyUrl', 'speed', 'selectedTeamId', 'batchSize', 'sessionBudget']) {
       if (c[key] !== undefined) this.form[key] = c[key];
     }
     if (c.brightData) this.form.brightData = { ...this.form.brightData, ...c.brightData, zonePassword: '' };
@@ -1123,21 +1128,63 @@ export class TrueStudioManager {
     const v = sel.verify;
     if (!v) return `<span class="ts-verify v-idle">${t('ts.verify_not_tested')}</span>`;
     const ago = Math.max(1, Math.round((Date.now() - (v.at || 0)) / 60000));
+    const mfaLabel = v.mfaEnabled === true
+      ? ` · ${escapeHtml(t('ts.team_2fa_enabled'))}`
+      : v.mfaEnabled === false ? ` · ${escapeHtml(t('ts.team_2fa_disabled'))}` : '';
     if (v.ok) {
       const u = v.username ? ' · ' + escapeHtml(v.username) : '';
-      return `<span class="ts-verify v-ok">${icon('check', 'ts-inline-icon')} ${t('ts.verify_ok')} (${ago}m)${u}</span>`;
+      return `<span class="ts-verify v-ok">${icon('check', 'ts-inline-icon')} ${t('ts.verify_ok')} (${ago}m)${mfaLabel}${u}</span>`;
     }
-    return `<span class="ts-verify v-bad" title="${escapeAttr(v.message || '')}">${icon('x', 'ts-inline-icon')} ${t('ts.verify_failed')}: ${escapeHtml(v.status || '')}</span>`;
+    return `<span class="ts-verify v-bad" title="${escapeAttr(v.message || '')}">${icon('x', 'ts-inline-icon')} ${t('ts.verify_failed')}: ${escapeHtml(v.status || '')}${mfaLabel}</span>`;
+  }
+
+  _selectedAccountRecord() {
+    const email = String(this.selectedEmail || this.form.email || '').toLowerCase();
+    return this.accounts.find(account => String(account.email || '').toLowerCase() === email) || null;
+  }
+
+  _team2faGate() {
+    const account = this._selectedAccountRecord();
+    if (!account) return { allowed: false, message: t('ts.pick_account_first') };
+    if (!account.hasTotp) return { allowed: false, message: t('ts.team_2fa_required') };
+    if (!account.verify) return { allowed: false, message: t('ts.team_2fa_check_first') };
+    if (account.verify.ok !== true || account.verify.mfaEnabled !== true) {
+      return { allowed: false, message: t('ts.team_2fa_not_enabled') };
+    }
+    return { allowed: true, message: '' };
   }
 
   _renderToggle(key, label) {
+    const locked = key === 'createTeams' && !this._team2faGate().allowed;
+    if (locked && this.form.rules[key]) this.form.rules[key] = false;
     const on = !!this.form.rules[key];
+    const toggleAttrs = locked
+      ? 'aria-disabled="true" tabindex="-1"'
+      : `data-toggle="${key}" role="switch" aria-checked="${on}"`;
     return `
-      <div class="ts-toggle-row">
+      <div class="ts-toggle-row${locked ? ' is-locked' : ''}">
         <div class="ts-toggle-label">${label}</div>
-        <div class="ts-toggle ${on ? 'on' : ''}" data-toggle="${key}" role="switch" aria-checked="${on}"></div>
+        <div class="ts-toggle ${on ? 'on' : ''}${locked ? ' locked' : ''}" ${toggleAttrs} title="${escapeAttr(locked ? this._team2faGate().message : '')}"></div>
       </div>
+      ${locked ? `<div class="ts-rule-hint warn ts-team-2fa-lock">${icon('warning', 'ts-inline-icon')} ${escapeHtml(this._team2faGate().message)}</div>` : ''}
     `;
+  }
+
+  _renderTeamCreationFields() {
+    if (!this.form.rules.createTeams) return '';
+    return `<div class="ts-team-create-fields" id="ts-team-create-fields">
+      <div class="ts-form-grid">
+        <div class="ts-field">
+          <div class="ts-field-label">${escapeHtml(t('ts.team_name_label'))}</div>
+          <input type="text" id="ts-team-name" class="ts-input" maxlength="32" value="${escapeAttr(this.form.teamName || '')}" placeholder="${escapeAttr(t('ts.team_name_placeholder'))}" />
+        </div>
+        <div class="ts-field">
+          <div class="ts-field-label">${escapeHtml(t('ts.team_count_label'))}</div>
+          <input type="number" id="ts-team-count" class="ts-input numeric" min="1" max="30" value="${Math.max(1, Math.min(30, Number(this.form.teamCount) || 1))}" />
+        </div>
+      </div>
+      <div class="ts-field-hint">${escapeHtml(t('ts.team_count_hint'))}</div>
+    </div>`;
   }
 
   // Team dropdown — shown when linkBots ON and createTeams OFF
@@ -1511,6 +1558,8 @@ export class TrueStudioManager {
     };
     setField('#ts-count',  botsOn);
     setField('#ts-prefix', botsOn);
+    setField('#ts-team-name',  !!r.createTeams);
+    setField('#ts-team-count', !!r.createTeams);
     setField('#ts-wait',   batchOn);
 
     // When linkBots is turned ON and createTeams is OFF → load teams dropdown
@@ -3678,6 +3727,11 @@ export class TrueStudioManager {
 
   // ── Create Team modal ──────────────────────────────────────────────────
   _openCreateTeamModal() {
+    const teamGate = this._team2faGate();
+    if (!teamGate.allowed) {
+      showNotification(teamGate.message, 'error');
+      return;
+    }
     document.querySelector('.ts-create-team-overlay')?.remove();
     const wrap = document.createElement('div');
     wrap.className = 'ts-create-team-overlay';
@@ -3688,6 +3742,10 @@ export class TrueStudioManager {
         <input class="ts-cteam-input" id="ts-cteam-name" type="text"
           maxlength="32"
           placeholder="${escapeAttr(t('ts.team_name_placeholder'))}" />
+        <label class="ts-cteam-label">${escapeHtml(t('ts.team_count_label'))}</label>
+        <input class="ts-cteam-input" id="ts-cteam-count" type="number"
+          min="1" max="30" value="1" inputmode="numeric" />
+        <div class="ts-field-hint">${escapeHtml(t('ts.team_count_hint'))}</div>
         <div class="ts-cteam-actions">
           <button class="ts-btn" id="ts-cteam-cancel">${escapeHtml(t('ts.close'))}</button>
           <button class="ts-btn primary" id="ts-cteam-confirm">${escapeHtml(t('ts.team_create_confirm'))}</button>
@@ -3697,6 +3755,7 @@ export class TrueStudioManager {
     document.body.appendChild(wrap);
     requestAnimationFrame(() => wrap.classList.add('open'));
     const input   = wrap.querySelector('#ts-cteam-name');
+    const countInput = wrap.querySelector('#ts-cteam-count');
     const confirm = wrap.querySelector('#ts-cteam-confirm');
     const cancel  = wrap.querySelector('#ts-cteam-cancel');
     const close = () => { wrap.classList.remove('open'); setTimeout(() => wrap.remove(), 220); };
@@ -3704,30 +3763,40 @@ export class TrueStudioManager {
     wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
     confirm.addEventListener('click', async () => {
       const name = (input?.value || '').trim();
+      const count = Number.parseInt(countInput?.value || '1', 10);
       if (!name) { input?.focus(); return; }
+      if (!Number.isInteger(count) || count < 1 || count > 30) {
+        showNotification(t('ts.team_count_label') + ': ' + (getLang() === 'ar' ? 'اختر رقماً من 1 إلى 30' : 'choose 1–30'), 'error');
+        countInput?.focus();
+        return;
+      }
       confirm.disabled = true;
       confirm.textContent = t('ts.team_creating');
       try {
-        const result = await window.electronAPI.tsCreateTeam(this.selectedEmail, name);
-        showNotification(t('ts.team_created_ok'), 'success');
+        const result = await window.electronAPI.tsCreateTeam(this.selectedEmail, name, count);
+        const createdTeams = Array.isArray(result?.teams)
+          ? result.teams.filter(team => team?.id && team.confirmed === true)
+          : (result?.team?.id ? [result.team] : []);
+        if (!createdTeams.length) throw new Error('لم يتم تأكيد أي تيم بعد الإنشاء');
+        showNotification(`${t('ts.team_created_ok')} (${createdTeams.length})`, 'success');
         sfx.ding?.();
-        // Immediately inject the new team into the local library so the tab
-        // shows it right away without waiting for a slow API round-trip.
+        // Immediately inject only Discord-confirmed teams into the library.
         if (!this.library) this.library = { teams: [], personal: [], totals: {}, currentUserId: null };
         if (!Array.isArray(this.library.teams)) this.library.teams = [];
-        const newTeam = result?.team || {};
-        this.library.teams.unshift({
-          id: newTeam.id || String(Date.now()),
-          name: newTeam.name || name,
-          icon: newTeam.icon || null,
+        const existingIds = new Set(this.library.teams.map(team => String(team.id)));
+        const newTeams = createdTeams.filter(team => !existingIds.has(String(team.id))).map(team => ({
+          id: team.id,
+          name: team.name || name,
+          icon: team.icon || null,
           apps: [],
           isOwner: true,
           myRole: 'owner',
           memberCount: 1,
           appsFromTeamEndpoint: false,
-        });
+        }));
+        this.library.teams.unshift(...newTeams);
         this.library.totals = this.library.totals || {};
-        this.library.totals.teams = (this.library.totals.teams || 0) + 1;
+        this.library.totals.teams = (this.library.totals.teams || 0) + newTeams.length;
         close();
         // Switch to teams tab immediately to show the new team
         this._switchLibraryTab('teams');
@@ -3786,17 +3855,23 @@ export class TrueStudioManager {
       );
       if (!ok) return;
       confirm.disabled = true;
+      confirm.setAttribute('aria-busy', 'true');
       confirm.textContent = t('ts.moving_to_team');
       try {
-        await window.electronAPI.tsAddAppToTeam(this.selectedEmail, appId, teamId);
+        const moveRequest = window.electronAPI.tsAddAppToTeam(this.selectedEmail, appId, teamId);
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة ربط التيم — لم يتم تأكيد النقل')), 90_000));
+        await Promise.race([moveRequest, timeout]);
         showNotification(t('ts.move_ok'), 'success');
         sfx.ding?.();
-        close();
-        await this.loadLibrary();
+        // Do not await the library refresh while the modal is open. A slow
+        // Discord read must never make a completed transfer look stuck.
         this._switchLibraryTab('teams');
+        close();
+        this.loadLibrary().catch(() => {});
       } catch (e) {
         showNotification((t('ts.move_failed') || 'Move failed') + ': ' + (e.message || e), 'error');
         confirm.disabled = false;
+        confirm.removeAttribute('aria-busy');
         confirm.textContent = t('ts.move_to_team_confirm');
       }
     });
@@ -4014,6 +4089,12 @@ export class TrueStudioManager {
         const key = el.dataset.toggle;
         this.form.rules[key] = !this.form.rules[key];
         sfx.click?.();
+        if (key === 'createTeams') {
+          // Team name/count fields are conditional; render them immediately
+          // instead of leaving the user with an enabled switch and no inputs.
+          this.render();
+          return;
+        }
         el.classList.toggle('on');
         el.setAttribute('aria-checked', String(this.form.rules[key]));
         this._updateRuleFieldStates();
@@ -4024,6 +4105,12 @@ export class TrueStudioManager {
       this.form.count = Math.max(1, Math.min(50, parseInt(e.target.value) || 1));
     });
     $('#ts-prefix')?.addEventListener('input', (e) => this.form.prefix = e.target.value);
+    $('#ts-team-name')?.addEventListener('input', (e) => {
+      this.form.teamName = e.target.value.slice(0, 32);
+    });
+    $('#ts-team-count')?.addEventListener('input', (e) => {
+      this.form.teamCount = Math.max(1, Math.min(30, parseInt(e.target.value) || 1));
+    });
     $('#ts-wait')?.addEventListener('input', (e) => {
       this.form.waitMinutes = Math.max(0, Math.min(60, parseInt(e.target.value) || 0));
     });
@@ -4239,9 +4326,18 @@ export class TrueStudioManager {
       showNotification(t('ts.invalid_email'), 'error');
       return;
     }
+    const selected = this.accounts.find(a => String(a.email || '').toLowerCase() === email);
+    const hasSavedPassword = selected?.hasPassword === true;
+    const enteredPassword = typeof this.form.password === 'string' ? this.form.password : '';
+    if (!enteredPassword.trim() && !hasSavedPassword) {
+      showNotification(t('ts.password_required'), 'error');
+      this.contentArea.querySelector('.ts-method-collapsible')?.setAttribute('open', '');
+      this.contentArea.querySelector('#ts-password')?.focus();
+      return;
+    }
     const payload = { email };
     // Only send fields if user typed them (so editing doesn't wipe existing creds)
-    if (this.form.password) payload.password = this.form.password;
+    if (enteredPassword.trim()) payload.password = enteredPassword;
     if (this.form.totpSecret) payload.totpSecret = this.form.totpSecret;
     if (this.form.directToken) payload.directToken = this.form.directToken;
     try {
@@ -4357,7 +4453,11 @@ export class TrueStudioManager {
       const r = await window.electronAPI.tsTestAccount(this.selectedEmail);
       this.accounts = r?.accounts || this.accounts;
       const ok = r?.verify?.ok;
-      showNotification(ok ? t('ts.verify_ok') : (t('ts.verify_failed') + ': ' + (r?.verify?.message || '')), ok ? 'success' : 'error');
+      const mfaEnabled = r?.verify?.user?.mfa_enabled === true;
+      const notice = !mfaEnabled
+        ? t('ts.team_2fa_not_enabled')
+        : (ok ? t('ts.verify_ok') : (t('ts.verify_failed') + ': ' + (r?.verify?.message || '')));
+      showNotification(notice, ok && mfaEnabled ? 'success' : 'error');
     } catch (e) {
       showNotification(e.message || 'Test failed', 'error');
     } finally {
@@ -4400,6 +4500,23 @@ export class TrueStudioManager {
       showNotification(t('ts.rule_hint_link_needs_bots') || 'فعّل إنشاء البوتات قبل تفعيل ربط البوتات.', 'error');
       return;
     }
+    if (r.createTeams) {
+      const teamGate = this._team2faGate();
+      if (!teamGate.allowed) {
+        showNotification(teamGate.message, 'error');
+        return;
+      }
+      if (!(this.form.teamName || '').trim()) {
+        showNotification(t('ts.team_name_label') + ': ' + (getLang() === 'ar' ? 'هذا الحقل مطلوب' : 'required'), 'error');
+        this.contentArea.querySelector('#ts-team-name')?.focus();
+        return;
+      }
+      const teamCount = Number(this.form.teamCount);
+      if (!Number.isInteger(teamCount) || teamCount < 1 || teamCount > 30) {
+        showNotification(t('ts.team_count_label') + ': ' + (getLang() === 'ar' ? 'اختر رقماً من 1 إلى 30' : 'choose 1–30'), 'error');
+        return;
+      }
+    }
     this._sessionStartInFlight = true;
     this.render();
     try {
@@ -4414,6 +4531,8 @@ export class TrueStudioManager {
         rules: r,
         count: this.form.count,
         prefix: this.form.prefix,
+        teamName: this.form.teamName,
+        teamCount: this.form.teamCount,
         waitMinutes: this.form.waitMinutes,
         proxyUrl: this.form.proxyUrl || '',
         speed: this.form.speed || 'medium',

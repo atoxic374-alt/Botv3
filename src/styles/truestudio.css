@@ -4442,3 +4442,37 @@ body.light-theme .ts-proxy-rotation-badge { color: #08765f; background: rgba(11,
   .ts-proxy-tools-row { align-items: flex-start; flex-direction: column; }
   .ts-proxy-tools-row .ts-quick-setup-btn { width: 100%; }
 }
+
+/* ── Team creation prerequisites ─────────────────────────────────────────── */
+.ts-team-create-fields {
+  margin: 8px 0 10px;
+  padding: 10px;
+  border: 1px solid rgba(124,224,196,.14);
+  border-radius: 10px;
+  background: rgba(124,224,196,.035);
+}
+.ts-team-create-fields .ts-form-grid { margin: 0; }
+.ts-required-mark { color: var(--ts-danger, #ff5a6e); font-weight: 900; }
+.ts-toggle-row.is-locked { opacity: .58; }
+.ts-toggle.locked {
+  cursor: not-allowed;
+  filter: grayscale(.2);
+  opacity: .72;
+}
+.ts-team-2fa-lock {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: -2px;
+  font-size: 10.5px;
+}
+.ts-team-2fa-lock .ic { flex: 0 0 auto; width: 14px; height: 14px; }
+body.light-theme .ts-team-create-fields {
+  border-color: rgba(25,71,64,.18);
+  background: rgba(11,128,104,.05);
+}
+body.light-theme .ts-team-2fa-lock { color: #9a6500; }
+@media (max-width: 620px) {
+  .ts-team-create-fields { padding: 8px; }
+  .ts-team-create-fields .ts-form-grid { grid-template-columns: 1fr; }
+}
