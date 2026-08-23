@@ -20,7 +20,14 @@ const SVG = {
   shield: '<path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m8 12 2.5 2.5L16 9"/>',
   robot: '<rect x="5" y="7" width="14" height="12" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M9 16h6"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/>',
-  filter: '<path d="M4 6h16M7 12h10m-7 6h4"/>'
+  filter: '<path d="M4 6h16M7 12h10m-7 6h4"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 10v6m0-9h.01"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  external: '<path d="M14 3h7v7M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  close: '<path d="m6 6 12 12M18 6 6 18"/>',
+  back: '<path d="m15 18-6-6 6-6M9 12h12"/>',
+  skip: '<path d="m8 5 7 7-7 7M16 5v14"/>'
 };
 
 export function icon(name, cls = '') {

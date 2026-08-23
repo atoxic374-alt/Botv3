@@ -4076,7 +4076,7 @@ body.light-theme .ts-workspace .ts-log { background: #baccc7; }
 .ts-log-badges { justify-content: flex-end; flex-wrap: wrap; }
 .ts-log-bot-badge, .ts-log-speed-badge { border-radius: 7px; padding: 2px 6px; font-size: 9px; }
 .ts-log-empty { position: relative; display: grid; place-items: center; min-height: 120px; padding: 24px 14px; color: #7d8aa0; font-size: 11px; }
-.ts-log-empty::before { content: '×'; display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 9px; border: 1px solid rgba(124,224,196,.18); border-radius: 12px; color: var(--ts-mint); font: 700 18px/1 ui-monospace, monospace; background: rgba(124,224,196,.07); box-shadow: 0 8px 20px rgba(0,0,0,.18); }
+.ts-log-empty::before { content: ''; display: block; width: 34px; height: 34px; margin-bottom: 9px; border: 1px solid rgba(124,224,196,.22); border-radius: 12px; background: radial-gradient(circle at 50% 50%, var(--ts-mint) 0 3px, transparent 4px), rgba(124,224,196,.07); box-shadow: 0 8px 20px rgba(0,0,0,.18); }
 body.light-theme .ts-log-wrap { background: linear-gradient(155deg, #dbe8e4, #c7d8d3); border-color: rgba(20,65,57,.24); }
 body.light-theme .ts-log-toolbar { background: rgba(205,220,216,.92); border-bottom-color: rgba(20,65,57,.16); }
 body.light-theme .ts-log-toolbar-title { color: #17332f; }
@@ -4192,3 +4192,101 @@ body.light-theme .ts-log-empty { color: #55716b; }
 /* Log copy remains readable for Arabic and mixed-language events. */
 .ts-log-msg { direction: auto; text-align: start; unicode-bidi: plaintext; }
 .ts-log-time, .ts-log-bot-badge, .ts-log-speed-badge { direction: ltr; }
+
+/* ── Operation verification badges ─────────────────────────────────────── */
+.ts-log-stage-badge,
+.ts-log-confirm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 18px;
+  padding: 2px 6px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.ts-log-stage-badge {
+  color: #9fb0c8;
+  background: rgba(159,176,200,.1);
+  border: 1px solid rgba(159,176,200,.16);
+}
+.ts-log-confirm-badge.ok {
+  color: #75dfbf;
+  background: rgba(117,223,191,.1);
+  border: 1px solid rgba(117,223,191,.18);
+}
+.ts-log-confirm-badge.fail {
+  color: #ff9aaa;
+  background: rgba(255,90,110,.1);
+  border: 1px solid rgba(255,90,110,.2);
+}
+.ts-log-confirm-badge .ts-inline-icon,
+.ts-log-stage-badge .ts-inline-icon {
+  width: 11px;
+  height: 11px;
+}
+.ts-log-lv-error .ts-log-confirm-badge.fail,
+.ts-log-lv-warn .ts-log-confirm-badge.fail { font-weight: 900; }
+body.light-theme .ts-log-stage-badge {
+  color: #3f5752;
+  background: rgba(20,65,57,.07);
+  border-color: rgba(20,65,57,.14);
+}
+body.light-theme .ts-log-confirm-badge.ok {
+  color: #08765f;
+  background: rgba(8,118,95,.08);
+  border-color: rgba(8,118,95,.2);
+}
+body.light-theme .ts-log-confirm-badge.fail {
+  color: #a52d3c;
+  background: rgba(165,45,60,.08);
+  border-color: rgba(165,45,60,.2);
+}
+@media (max-width: 680px) {
+  .ts-log-badges { gap: 4px; }
+  .ts-log-stage-badge { display: none; }
+  .ts-log-confirm-badge { font-size: 8px; padding-inline: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ts-log-entry-new, .ts-log-bench { animation: none !important; }
+}
+
+/* ── Reset All final state controls ─────────────────────────────────────── */
+.ts-reset-all-actions {
+  display: flex;
+  justify-content: flex-start;
+  min-height: 0;
+}
+.ts-reset-all-close {
+  margin-top: 2px;
+  padding: 7px 12px;
+  font-size: 11px;
+}
+.ts-ra-log-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.45;
+}
+.ts-ra-log-line .ts-inline-icon { width: 13px; height: 13px; flex: 0 0 auto; }
+.ts-ra-log-line.ok { color: #7ce0c4; }
+.ts-ra-log-line.fail { color: #ff9aaa; }
+.ts-ra-log-line.info { color: #a9b6ca; }
+.ts-reset-all-card:has(.ts-ra-log-line.fail) { border-color: rgba(255,90,110,.38); }
+body.light-theme .ts-reset-all-card {
+  background: #e4efeb;
+  border-color: rgba(174,119,23,.35);
+  box-shadow: 0 12px 36px rgba(21,56,49,.22);
+}
+body.light-theme .ts-reset-all-current { color: #17332f; }
+body.light-theme .ts-reset-all-counts { color: #496660; }
+body.light-theme .ts-ra-log-line.ok { color: #08765f; }
+body.light-theme .ts-ra-log-line.fail { color: #a52d3c; }
+body.light-theme .ts-ra-log-line.info { color: #3f5752; }
+body.light-theme .ts-reset-all-card:has(.ts-ra-log-line.fail) { border-color: rgba(165,45,60,.38); }
+@media (max-width: 520px) {
+  .ts-reset-all-overlay { padding: 0 10px 12px; }
+  .ts-reset-all-card { width: 100%; padding: 16px; border-radius: 15px; }
+  .ts-reset-all-current { font-size: 12px; }
+}

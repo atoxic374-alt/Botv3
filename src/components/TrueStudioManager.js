@@ -201,7 +201,8 @@ export class TrueStudioManager {
                 this._refreshBotTokensUI();
               } else if (ra.failed > (this._raLastFailed || 0)) {
                 this._raLastFailed = ra.failed;
-                this._resetAllProgress.fail(ra.done + ra.failed, ra.current || '?', '');
+                const detail = Array.isArray(ra.errorDetails) ? ra.errorDetails[ra.errorDetails.length - 1] : null;
+                this._resetAllProgress.fail(ra.done + ra.failed, ra.current || detail?.name || '?', detail?.message || 'تعذر تأكيد العملية');
               }
             }
           }
@@ -211,7 +212,8 @@ export class TrueStudioManager {
             this._updateTokensTabBadge();
             const ra = data.resetAll;
             if (this._resetAllProgress) {
-              this._resetAllProgress.done({ ok: ra.done, failed: ra.failed });
+              const lastDetail = Array.isArray(ra.errorDetails) ? ra.errorDetails[ra.errorDetails.length - 1] : null;
+              this._resetAllProgress.done({ ok: ra.done, failed: ra.failed, remaining: ra.remaining, state: ra.state, lastError: lastDetail?.message || '' });
               this._resetAllProgress = null;
             }
             this._loadBotTokens().then(() => {
@@ -268,7 +270,7 @@ export class TrueStudioManager {
       <div class="ts-captcha-modal">
         <div class="ts-captcha-head">
           <div class="ts-captcha-title">${escapeHtml(t('ts.captcha_modal_title') || 'Solve captcha challenge')}</div>
-          <button class="ts-captcha-close" type="button" aria-label="close">×</button>
+          <button class="ts-captcha-close" type="button" aria-label="close">${icon('x', 'ts-inline-icon')}</button>
         </div>
         <div class="ts-captcha-body">
           <div class="ts-captcha-context">${escapeHtml(t('ts.captcha_context_label') || 'Context')}: <b>${escapeHtml(ctx)}</b></div>
@@ -882,7 +884,7 @@ export class TrueStudioManager {
         const hasPfp = !!(this.pfp?.avatar || this.pfp?.banner);
         pfpAllBtn.disabled = !hasPfp;
         pfpAllBtn.classList.toggle('mint', hasPfp);
-        pfpAllBtn.title = hasPfp ? 'تطبيق الهوية على كل البوتات ✓' : 'احفظ صورة أو بنر أولاً';
+        pfpAllBtn.title = hasPfp ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً';
       }
       this.render();
     } catch (e) {
@@ -926,6 +928,7 @@ export class TrueStudioManager {
       const reader  = resp.body.getReader();
       const decoder = new TextDecoder();
       let   buf     = '';
+      let terminalEvent = false;
 
       const parseLine = (line) => {
         if (!line.startsWith('data:')) return;
@@ -943,12 +946,14 @@ export class TrueStudioManager {
           prog.setProgress(evt.index, evt.total);
           // Show per-bot line: bot result + app icon result
           const appNote = evt.appOk ? '(الأيقونة محدثة)' : evt.appError ? `(فشل تحديث الأيقونة: ${evt.appError.slice(0,40)})` : '';
-          prog.logLine(evt.ok ? '✓' : '✗', evt.name, (evt.error ? evt.error.slice(0,60) : '') + (appNote ? ' ' + appNote : ''));
+          prog.logLine(evt.ok ? 'ok' : 'fail', evt.name, (evt.error ? evt.error.slice(0,60) : '') + (appNote ? ' ' + appNote : ''));
 
         } else if (evt.type === 'done') {
+          terminalEvent = true;
           prog.done(evt.okCount, evt.failCount);
 
         } else if (evt.type === 'error') {
+          terminalEvent = true;
           throw new Error(evt.error);
         }
       };
@@ -965,12 +970,13 @@ export class TrueStudioManager {
           if (t) try { parseLine(t); } catch (e) { prog.error(e.message || String(e)); break; }
         }
       }
+      if (!terminalEvent) throw new Error('انتهى اتصال تطبيق الهوية قبل وصول النتيجة النهائية');
     } catch (e) {
       prog.setIndeterminate(false);
       prog.error(e.message || String(e));
     } finally {
       this._pfpAllRunning = false;
-      this._libModal?.querySelectorAll('#ts-lib-pfp-all').forEach(b => { b.disabled = false; });
+      this._syncLibraryBulkButtons();
     }
   }
 
@@ -1021,7 +1027,16 @@ export class TrueStudioManager {
 
     const cells = rows.map(({ email, isActive }) => {
       const p = paused[email];
-      const until = p ? Number(p.waitUntilTs || 0) : 0;
+      const until = p ? Number(typeof p === 'number' ? p : (p.waitUntilTs || 0)) : 0;
+      const classification = typeof p === 'object' ? String(p.classification || '') : '';
+      const pauseReason = typeof p === 'object' ? String(p.reason || '') : '';
+      const pauseLabel = {
+        rate_limited: 'rate limit',
+        cloudflare_block: 'حظر اتصال',
+        invalid_token: 'توكن غير صالح',
+        portal_failed: 'Portal غير جاهز',
+        mfa_block: 'MFA مطلوب',
+      }[classification] || 'متوقف مؤقتاً';
       const isPaused = until > now;
 
       if (isActive) {
@@ -1037,7 +1052,7 @@ export class TrueStudioManager {
           <div class="ts-pool-row ts-pool-row--paused">
             <span class="ts-pool-dot ts-pool-dot--paused"></span>
             <span class="ts-pool-email">${escapeHtml(email)}</span>
-            <span class="ts-pool-badge ts-pool-badge--paused" data-ts-account-hold-until="${until}">${this._fmtMs(Math.max(0, until - now))}</span>
+            <span class="ts-pool-badge ts-pool-badge--paused" data-ts-account-hold-until="${until}" title="${escapeHtml(pauseReason || pauseLabel)}">${escapeHtml(pauseLabel)} · ${this._fmtMs(Math.max(0, until - now))}</span>
           </div>`;
       }
       return `
@@ -1051,7 +1066,7 @@ export class TrueStudioManager {
     return `
       <div class="ts-pool-panel">
         <div class="ts-pool-header">
-          <span class="ts-pool-icon">⇄</span>
+          <span class="ts-pool-icon">${icon('refresh', 'ts-inline-icon')}</span>
           <span class="ts-pool-title">حسابات الجلسة</span>
           <span class="ts-pool-count">${rows.length} حساب</span>
         </div>
@@ -1220,8 +1235,8 @@ export class TrueStudioManager {
 
     const proxyStatus = pr
       ? (pr.ok
-          ? `<span style="color:#3ba55d;font-size:11px;">✓ يعمل — ${escapeHtml(pr.summary || ('IP: ' + (pr.ip || '?')))}</span>`
-          : `<span style="color:#ed4245;font-size:11px;">✕ ${escapeHtml(pr.error || 'فشل الاتصال')}</span>`)
+          ? `<span class="ts-proxy-status ok">${icon('check', 'ts-inline-icon')} يعمل — ${escapeHtml(pr.summary || ('IP: ' + (pr.ip || '?')))}</span>`
+          : `<span class="ts-proxy-status fail">${icon('x', 'ts-inline-icon')} ${escapeHtml(pr.error || 'فشل الاتصال')}</span>`)
       : '';
 
     // ── Quick Setup panel (3 preset cards) ──────────────────────────────────
@@ -1234,7 +1249,7 @@ export class TrueStudioManager {
           ${TrueStudioManager.BD_PRESETS.map(p => `
             <div style="padding:9px 8px;background:rgba(255,255,255,.04);border-radius:7px;border:1px solid ${p.recommended ? 'rgba(59,165,93,.4)' : 'rgba(255,255,255,.06)'};display:flex;flex-direction:column;gap:4px;position:relative;">
               ${p.recommended ? `<div style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);background:#3ba55d;color:#fff;font-size:9px;padding:1px 7px;border-radius:10px;white-space:nowrap;">موصى به</div>` : ''}
-              <div style="font-size:13px;text-align:center;">${p.icon}</div>
+              <div class="ts-qs-icon">${p.icon}</div>
               <div style="font-weight:700;font-size:12px;text-align:center;">${p.name}</div>
               <div style="font-size:10px;text-align:center;color:var(--ts-muted,#7e8592);">${p.nameAr}</div>
               <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin:2px 0;">
@@ -1254,7 +1269,7 @@ export class TrueStudioManager {
         <div style="margin-top:8px;font-size:10px;color:var(--ts-muted,#7e8592);text-align:center;">
           الأسعار من Bright Data 2025 ·
           <a href="https://brightdata.com/cp/zones" target="_blank" rel="noopener"
-            style="color:#5865f2;text-decoration:none;">افتح لوحة الـ Zones →</a>
+            style="color:#5865f2;text-decoration:none;">افتح لوحة الـ Zones ${icon('external', 'ts-inline-icon')}</a>
         </div>
       </div>
     ` : '';
@@ -1266,7 +1281,7 @@ export class TrueStudioManager {
         <span style="font-size:11px;font-weight:600;">${preset.name}</span>
         <span style="font-size:10px;color:var(--ts-muted,#7e8592);flex:1;">${preset.zoneHint}</span>
         <a href="${preset.bdUrl}" target="_blank" rel="noopener"
-          style="font-size:10px;color:#5865f2;text-decoration:none;white-space:nowrap;">إنشاء Zone →</a>
+          style="font-size:10px;color:#5865f2;text-decoration:none;white-space:nowrap;">إنشاء Zone ${icon('external', 'ts-inline-icon')}</a>
       </div>
     ` : '';
 
@@ -1329,7 +1344,7 @@ export class TrueStudioManager {
 
     // ── Proxy header row with Bright Data toggle ────────────────────────────
     const proxyCountBadge = !bd.enabled && (this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length > 1
-      ? `<span style="font-size:10px;color:#3ba55d;margin-right:4px;">✓ ${(this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length} بروكسي</span>`
+      ? `<span class="ts-proxy-count">${icon('check', 'ts-inline-icon')} ${(this.form.proxyUrl || '').split(/\n/).filter(l => l.trim()).length} بروكسي</span>`
       : '';
 
     return `
@@ -1337,10 +1352,10 @@ export class TrueStudioManager {
         <div class="ts-field-label">سرعة التنفيذ</div>
         <div class="ts-speed-pills">
           ${[
-            { v:'medium',   label:'Medium',    sub:'×1.0 — آمن',          cls:'' },
-            { v:'fast',     label:'Fast',      sub:'×0.4 — سريع',         cls:'' },
-            { v:'veryfast', label:'Very Fast', sub:'×0.15 — أسرع',        cls:'warn' },
-            { v:'ultra',    label:'Ultra',     sub:'×0.05 — أقصى سرعة',     cls:'danger' },
+            { v:'medium',   label:'Medium',    sub:'1.0x — آمن',          cls:'' },
+            { v:'fast',     label:'Fast',      sub:'0.4x — سريع',         cls:'' },
+            { v:'veryfast', label:'Very Fast', sub:'0.15x — أسرع',        cls:'warn' },
+            { v:'ultra',    label:'Ultra',     sub:'0.05x — أقصى سرعة',     cls:'danger' },
           ].map(s => `
             <label class="ts-speed-pill ${this.form.speed === s.v ? 'active' : ''} ${s.cls}">
               <input type="radio" name="ts-speed" value="${s.v}" ${this.form.speed === s.v ? 'checked' : ''} style="display:none">
@@ -1448,7 +1463,7 @@ export class TrueStudioManager {
     // Full pipeline — all good
     if (r.createTeams && r.createBots && r.linkBots) {
       return `<div class="ts-rule-hint ok">
-        ${icon('check', 'ts-inline-icon')} ${escapeHtml(t('ts.rule_hint_full') || 'Full pipeline: create team → create bots → link bots into team.')}
+        ${icon('check', 'ts-inline-icon')} ${escapeHtml(t('ts.rule_hint_full') || 'Full pipeline: create team, create bots, then link them to the team.')}
       </div>`;
     }
     return '';
@@ -1515,7 +1530,7 @@ export class TrueStudioManager {
             : `<div class="ts-verify-popup-err">${escapeHtml(vr.error || t('ts.captcha_unknown_error'))}</div>`
           }
         </div>
-        <button class="ts-verify-popup-close" id="ts-captcha-verify-dismiss">×</button>
+        <button class="ts-verify-popup-close" id="ts-captcha-verify-dismiss">${icon('x', 'ts-inline-icon')}</button>
       </div>` : '';
     return `
       <details class="ts-card ts-optional-card" id="ts-captcha-card">
@@ -1688,24 +1703,47 @@ export class TrueStudioManager {
       <path d="M6 1L1 9h4l-1 6 5-8H5l1-6z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
     </svg>`;
 
+    const stageNames = {
+      create_application: 'إنشاء التطبيق',
+      verify_team_link: 'تأكيد الربط',
+      ensure_bot: 'تأكيد البوت',
+      reset_token: 'إنشاء التوكن',
+      apply_identity: 'تطبيق الهوية',
+      apply_intents: 'تطبيق Intents',
+      transfer_to_team: 'نقل للتيم',
+      account_health: 'فحص الحساب',
+      account_switch: 'تبديل الحساب',
+      session_rebuild: 'إعادة الجلسة',
+      warmup: 'تجهيز الجلسة',
+      rate_limit: 'Rate limit',
+    };
     return filtered.map((e, idx) => {
       const time = new Date(e.ts).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const icon = ICONS[e.level] || ICONS.info;
+      const displayLevel = e.confirmed === false && e.level === 'success' ? 'error' : e.level;
+      const statusIcon = ICONS[displayLevel] || ICONS.info;
       const durBadge = e.durationMs > 0
         ? `<span class="ts-log-speed-badge ts-log-speed-${this._speedClass(e.durationMs)}" title="وقت الإنشاء">${SVG_BOLT} ${this._fmtDuration(e.durationMs)}</span>`
         : '';
       const botBadge = e.botName
         ? `<span class="ts-log-bot-badge">${escapeHtml(e.botName)}</span>`
         : '';
+      const stageBadge = e.stage && stageNames[e.stage]
+        ? `<span class="ts-log-stage-badge">${escapeHtml(stageNames[e.stage])}</span>`
+        : '';
+      const confirmBadge = e.confirmed === false
+        ? `<span class="ts-log-confirm-badge fail">${icon('warning', 'ts-inline-icon')} غير مكتمل</span>`
+        : e.confirmed === true
+          ? `<span class="ts-log-confirm-badge ok">${icon('check', 'ts-inline-icon')} تم التحقق</span>`
+          : '';
       const msgText = e.durationMs
-        ? escapeHtml(e.msg.replace(/ ⚡ [\d.]+[ms]+$/, ''))
+        ? escapeHtml(e.msg.replace(/\s+[—-]?\s*⚡\s*[\d.]+[ms]+$/, ''))
         : escapeHtml(e.msg);
 
-      return `<div class="ts-log-line ts-log-lv-${e.level} ts-log-entry-new" data-idx="${idx}">
-        <span class="ts-log-row-icon">${icon}</span>
+      return `<div class="ts-log-line ts-log-lv-${displayLevel} ts-log-entry-new" data-idx="${idx}">
+        <span class="ts-log-row-icon">${statusIcon}</span>
         <span class="ts-log-time">${time}</span>
         <span class="ts-log-msg">${msgText}</span>
-        <span class="ts-log-badges">${botBadge}${durBadge}</span>
+        <span class="ts-log-badges">${botBadge}${stageBadge}${confirmBadge}${durBadge}</span>
       </div>`;
     }).join('');
   }
@@ -1870,32 +1908,34 @@ export class TrueStudioManager {
       return;
     }
     const savedCount = this.botTokens.length;
+    const libraryReady = !!this.library && this.library.complete !== false;
+    const libraryBlockedTitle = libraryReady ? '' : 'حدّث المكتبة وتأكد من اكتمال بيانات التيمات أولاً';
     const overlay = document.createElement('div');
     overlay.className = 'ts-lib-overlay';
     overlay.innerHTML = `
       <div class="ts-lib-page">
         <header class="ts-lib-page-head">
-          <button class="ts-lib-back" id="ts-lib-close" aria-label="back">←</button>
+          <button class="ts-lib-back" id="ts-lib-close" aria-label="back">${icon('back', 'ts-inline-icon')}</button>
           <div class="ts-lib-page-title">${t('ts.lib_btn_title') || 'فتح المكتبة'}</div>
           <div class="ts-lib-head-actions">
             <button class="ts-btn ts-intents-all-btn" id="ts-lib-intents-all"
-              ${(!this.selectedEmail) ? 'disabled' : ''}
-              title="تفعيل Intents للجميع">
+              ${(!this.selectedEmail || !libraryReady) ? 'disabled' : ''}
+              title="${escapeAttr(libraryReady ? 'تفعيل Intents للجميع' : libraryBlockedTitle)}">
               <span class="ts-drawn-icon bolt" aria-hidden="true"><i></i></span> Intents للجميع
             </button>
             <button class="ts-btn${(this.pfp?.avatar || this.pfp?.banner) ? ' mint' : ''}" id="ts-lib-pfp-all"
-              ${(!this.pfp?.avatar && !this.pfp?.banner) ? 'disabled' : ''}
-              title="${(this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً'}">
+              ${(!libraryReady || (!this.pfp?.avatar && !this.pfp?.banner)) ? 'disabled' : ''}
+              title="${escapeAttr(!libraryReady ? libraryBlockedTitle : ((this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً'))}">
               <span class="ts-drawn-icon image" aria-hidden="true"><i></i></span> تطبيق الهوية
             </button>
             <button class="ts-btn" id="ts-lib-bulk-invite"
-              ${!this.library ? 'disabled' : ''}
-              title="إنشاء روابط الدعوة">
+              ${(!libraryReady || !this.selectedEmail) ? 'disabled' : ''}
+              title="${escapeAttr(libraryReady ? 'إنشاء روابط الدعوة' : libraryBlockedTitle)}">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Bulk Invite
             </button>
             <button class="ts-btn ts-reset-all-btn" id="ts-lib-reset-all"
-              ${(!this.library || this._resetAllInFlight) ? 'disabled' : ''}
-              title="${escapeAttr(t('ts.reset_all_title'))}"
+              ${(!libraryReady || this._resetAllInFlight) ? 'disabled' : ''}
+              title="${escapeAttr(libraryReady ? t('ts.reset_all_title') : libraryBlockedTitle)}"
               style="${this._resetAllInFlight ? 'display:none' : ''}">
               ${icon('refresh', 'ts-inline-icon')} Reset All
             </button>
@@ -1998,6 +2038,9 @@ export class TrueStudioManager {
     }
     if (tab === 'teams') {
       const query = (this._libraryQuery || '').trim().toLowerCase();
+      const libraryWarning = this.library?.complete === false
+        ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} تعذر تحميل بعض تطبيقات التيمات. التيم الفارغ قد لا يعني أنه بلا تطبيقات. ${escapeHtml((this.library.warnings || [])[0]?.message || '')}</div>`
+        : '';
       const allTeams = this.library.teams || [];
       const teams = allTeams.map(team => ({ ...team, apps: (team.apps || []).filter(a => !query || `${a.name || ''} ${a.id || ''}`.toLowerCase().includes(query)) })).filter(team => !query || team.apps.length);
       const visibleApps = teams.flatMap(team => team.apps || []);
@@ -2007,6 +2050,7 @@ export class TrueStudioManager {
       if (!teams.length) {
         body.innerHTML = `
           <div class="ts-lib-teams-header">${createBtn}</div>
+          ${libraryWarning}
           ${this._renderLibraryToolbar([], 0)}
           <div class="ts-lib-empty">${query ? 'لا توجد نتائج مطابقة للبحث' : (t('ts.lib_no_teams') || 'لا توجد تيمز على هذا الحساب')}</div>`;
         body.querySelector('#ts-lib-create-team')?.addEventListener('click', () => this._openCreateTeamModal());
@@ -2014,6 +2058,7 @@ export class TrueStudioManager {
       }
       body.innerHTML = `
         <div class="ts-lib-teams-header">${createBtn}</div>
+        ${libraryWarning}
         ${this._renderLibraryToolbar(visibleApps, visibleApps.length)}
         ${teams.map(team => {
           const roleBadge = this._teamRoleBadge(team);
@@ -2039,10 +2084,13 @@ export class TrueStudioManager {
     }
     if (tab === 'personal') {
       const apps = this.library.personal || [];
+      const libraryWarning = this.library?.complete === false
+        ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} تعذر تحميل بعض بيانات المكتبة. راجع التيمات المتأثرة قبل تنفيذ عملية جماعية.</div>`
+        : '';
       const teams = this.library.teams || [];
       const query = (this._libraryQuery || '').trim().toLowerCase();
       const visibleApps = apps.filter(a => !query || `${a.name || ''} ${a.id || ''}`.toLowerCase().includes(query));
-      body.innerHTML = `${this._renderLibraryToolbar(visibleApps, visibleApps.length)}${visibleApps.length ? `<div class="ts-cards">${visibleApps.map(a => this._renderAppCard(a, { showMoveToTeam: teams.length > 0 })).join('')}</div>` : `<div class="ts-lib-empty">${query ? 'لا توجد نتائج مطابقة للبحث' : (t('ts.lib_no_personal') || 'لا توجد تطبيقات شخصية على هذا الحساب')}</div>`}`;
+      body.innerHTML = `${libraryWarning}${this._renderLibraryToolbar(visibleApps, visibleApps.length)}${visibleApps.length ? `<div class="ts-cards">${visibleApps.map(a => this._renderAppCard(a, { showMoveToTeam: teams.length > 0 })).join('')}</div>` : `<div class="ts-lib-empty">${query ? 'لا توجد نتائج مطابقة للبحث' : (t('ts.lib_no_personal') || 'لا توجد تطبيقات شخصية على هذا الحساب')}</div>`}`;
       this._bindLibraryToolbar(body);
       this._bindResetButtons(body);
       this._bindIntentButtons(body);
@@ -2085,6 +2133,31 @@ export class TrueStudioManager {
   }
 
   _selectedAppIds() { return [...this._selectedLibraryApps].filter(Boolean); }
+
+  _syncLibraryBulkButtons() {
+    if (!this._libModal) return;
+    const ready = !!this.library && this.library.complete !== false;
+    const emailReady = !!this.selectedEmail;
+    const blockedTitle = 'حدّث المكتبة وتأكد من اكتمال بيانات التيمات أولاً';
+    const setState = (id, disabled, title) => {
+      const btn = this._libModal.querySelector(id);
+      if (!btn) return;
+      btn.disabled = !!disabled;
+      if (title) btn.title = title;
+    };
+    setState('#ts-lib-intents-all', !ready || !emailReady || this._intentsAllRunning, ready ? 'تفعيل Intents للجميع' : blockedTitle);
+    setState('#ts-lib-pfp-all', !ready || !emailReady || !(this.pfp?.avatar || this.pfp?.banner) || this._pfpAllRunning,
+      !ready ? blockedTitle : ((this.pfp?.avatar || this.pfp?.banner) ? 'تطبيق الهوية على كل البوتات' : 'احفظ صورة أو بنر أولاً'));
+    setState('#ts-lib-bulk-invite', !ready || !emailReady, ready ? 'إنشاء روابط الدعوة' : blockedTitle);
+    const resetAllBtn = this._libModal.querySelector('#ts-lib-reset-all');
+    if (resetAllBtn) {
+      resetAllBtn.disabled = !ready || !emailReady || this._resetAllInFlight;
+      resetAllBtn.title = ready ? (t('ts.reset_all_title') || 'إعادة تعيين توكنات جميع البوتات') : blockedTitle;
+      resetAllBtn.style.display = this._resetAllInFlight ? 'none' : '';
+    }
+    const stopAllBtn = this._libModal.querySelector('#ts-lib-stop-all');
+    if (stopAllBtn) stopAllBtn.style.display = this._resetAllInFlight ? '' : 'none';
+  }
 
   _bindIntentButtons(root) {
     root.querySelectorAll('[data-intents-bot]').forEach(btn => {
@@ -2144,7 +2217,7 @@ export class TrueStudioManager {
             ${ic.link}
             دعوة البوت · <span class="ts-invite-bot-name">${escapeHtml(name)}</span>
           </div>
-          <button class="ts-token-modal-close" type="button" aria-label="close">×</button>
+          <button class="ts-token-modal-close" type="button" aria-label="close">${icon('x', 'ts-inline-icon')}</button>
         </div>
         <div class="ts-invite-body">
 
@@ -2207,7 +2280,7 @@ export class TrueStudioManager {
     // Copy
     overlay.querySelector('#ts-invite-copy')?.addEventListener('click', () => {
       const url = overlay.querySelector('#ts-invite-url')?.value || '';
-      navigator.clipboard?.writeText(url).then(() => showNotification('تم نسخ الرابط ✓', 'success')).catch(() => showNotification('تعذّر النسخ', 'error'));
+      navigator.clipboard?.writeText(url).then(() => showNotification('تم نسخ الرابط', 'success')).catch(() => showNotification('تعذّر النسخ', 'error'));
     });
 
     if (!this.selectedEmail) return;
@@ -2298,7 +2371,13 @@ export class TrueStudioManager {
             if (!raw.startsWith('data:')) continue;
             let evt; try { evt = JSON.parse(raw.slice(5)); } catch { continue; }
             if (evt.type === 'step')  addLog('info', evt.msg);
-             else if (evt.type === 'done')  { terminalEvent = true; addLog('ok',   `تم إضافة البوت إلى "${guildName}"`); addBtn.disabled = false; }
+             else if (evt.type === 'done')  {
+               terminalEvent = true;
+               if (evt.alreadyPresent) addLog('info', `البوت موجود مسبقاً في "${guildName}" — تم التخطي`);
+               else if (evt.verified === true) addLog('ok', `تمت إضافة البوت إلى "${guildName}" بعد التحقق`);
+               else addLog('fail', `انتهى الطلب دون تأكيد وجود البوت في "${guildName}"`);
+               addBtn.disabled = false;
+             }
              else if (evt.type === 'error') { terminalEvent = true; addLog('fail', evt.error); addBtn.disabled = false; }
           }
         }
@@ -2365,7 +2444,7 @@ export class TrueStudioManager {
       <div class="ts-bulk-invite-modal">
         <div class="ts-token-modal-head">
           <div class="ts-token-modal-title">${ic.link} Bulk Invite <span class="ts-bulk-count">· ${allBots.length} بوت</span></div>
-          <button class="ts-token-modal-close" type="button" aria-label="close">×</button>
+          <button class="ts-token-modal-close" type="button" aria-label="close">${icon('x', 'ts-inline-icon')}</button>
         </div>
         <div class="ts-bulk-invite-body">
 
@@ -2521,7 +2600,7 @@ export class TrueStudioManager {
       const el = overlay.querySelector(`.ts-bt-status[data-bot-id="${botId}"]`);
       if (!el) return;
       el.className = 'ts-bt-status ' + type;
-      el.innerHTML = type === 'ok' ? ic.check : type === 'fail' ? ic.x : ic.spin;
+      el.innerHTML = type === 'ok' ? ic.check : type === 'fail' ? ic.x : type === 'skip' ? ic.reload : ic.spin;
     };
 
     addBtn?.addEventListener('click', async () => {
@@ -2549,8 +2628,9 @@ export class TrueStudioManager {
           throw new Error(body.error || `HTTP ${resp.status}`);
         }
 
-        const reader = resp.body.getReader(); const decoder = new TextDecoder(); let buf = '';
-        while (true) {
+      const reader = resp.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+      let terminalEvent = false;
+      while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
@@ -2566,28 +2646,34 @@ export class TrueStudioManager {
             } else if (evt.type === 'progress') {
               const botName = allBots.find(b => b.id === evt.appId)?.name || evt.appId;
               if (progText) progText.textContent = `${evt.index} / ${evt.total}`;
-              setRowStatus(evt.appId, evt.ok ? 'ok' : 'fail');
-              if (evt.ok && !evt.skipped) addLog('ok',   `${botName} — تمت الإضافة`);
-              else if (evt.skipped)        addLog('info', `${botName} — موجود بالفعل`);
-              else                          addLog('fail', `${botName} — ${evt.error || 'فشل'}`);
+              setRowStatus(evt.appId, evt.ok ? 'ok' : evt.skipped ? 'skip' : 'fail');
+              if (evt.ok && !evt.skipped) addLog('ok', `${botName} — تمت الإضافة بعد التحقق`);
+              else if (evt.skipped) addLog('info', `${botName} — موجود بالفعل، تم التخطي`);
+              else addLog('fail', `${botName} — ${evt.error || 'فشل'}`);
 
-            } else if (evt.type === 'retry') {
+            } else if (evt.type === 'rate_limit' || evt.type === 'retry') {
               const botName = allBots.find(b => b.id === evt.appId)?.name || evt.appId;
-              addLog('info', `${botName} — rate limit، إعادة المحاولة بعد ${Math.round(evt.retryMs / 1000)}ث…`);
+              const wait = evt.retryAfterMs || evt.retryMs || 0;
+              addLog('info', `${botName} — rate limit، أعد المحاولة بعد ${Math.round(wait / 1000)}ث`);
 
             } else if (evt.type === 'done') {
-              addLog('ok', `اكتمل: ${evt.okCount} نجاح · ${evt.failCount} فشل · ${evt.skipCount} موجود`);
-              if (progText) progText.textContent = `${evt.okCount} / ${allBots.length}`;
+              terminalEvent = true;
+              const summary = [`${evt.okCount || 0} نجاح`, `${evt.failCount || 0} فشل`];
+              if ((evt.skipCount || 0) > 0) summary.push(`${evt.skipCount} تم التخطي`);
+              addLog((evt.failCount || 0) > 0 ? 'fail' : 'info', `اكتمل التحقق: ${summary.join(' · ')}`);
+              if (progText) progText.textContent = `${(evt.okCount || 0) + (evt.skipCount || 0)} / ${allBots.length}`;
               addBtn.disabled = false;
 
             } else if (evt.type === 'error') {
+              terminalEvent = true;
               addLog('fail', evt.error);
               addBtn.disabled = false;
             }
-          }
         }
-      } catch (e) {
-        addLog('fail', e.message || String(e));
+      }
+      if (!terminalEvent) throw new Error('انتهى اتصال الدعوة الجماعية قبل وصول النتيجة النهائية');
+    } catch (e) {
+      addLog('fail', e.message || String(e));
         addBtn.disabled = false;
       }
     });
@@ -2623,7 +2709,7 @@ export class TrueStudioManager {
       <div class="ts-intents-modal">
         <div class="ts-token-modal-head">
           <div class="ts-token-modal-title"><span class="ts-drawn-icon bolt" aria-hidden="true"><i></i></span> iNTeNT · ${escapeHtml(name)}</div>
-          <button class="ts-token-modal-close" type="button" aria-label="close">×</button>
+          <button class="ts-token-modal-close" type="button" aria-label="close">${icon('x', 'ts-inline-icon')}</button>
         </div>
         <div class="ts-token-modal-body">
           <div class="ts-token-modal-hint ts-intents-hint"><span class="ts-drawn-icon compass" aria-hidden="true"><i></i></span> الحالة الحالية للـ Privileged Intents الثلاثة. التفعيل/الإيقاف يتم عبر flags المحدودة القابلة للتعديل من API.</div>
@@ -2654,8 +2740,17 @@ export class TrueStudioManager {
       try {
         const r = await window.electronAPI.tsSetIntents(appId, this.selectedEmail, enabled);
         if (!r?.success && r?.error) throw new Error(r.error);
-        stateEl.innerHTML = this._intentRowsHtml(r.intents);
-        showNotification(enabled ? 'تم تفعيل Intents' : 'تم إيقاف Intents', 'success');
+        const operation = r.operation || { confirmed: true, partial: false };
+        const note = operation.confirmed === false
+          ? `<div class="ts-lib-warning">${icon('warning', 'ts-inline-icon')} تم تعديل القابل للتعديل فقط؛ بقيت ${operation.approvedRemain || 0} Intents معتمدة مفعّلة.</div>`
+          : '';
+        stateEl.innerHTML = note + this._intentRowsHtml(r.intents);
+        showNotification(
+          operation.confirmed === false
+            ? 'اكتمل التعديل جزئياً ولم يتم إخفاء النتيجة'
+            : (enabled ? 'تم تفعيل Intents بعد التحقق' : 'تم إيقاف Intents بعد التحقق'),
+          operation.confirmed === false ? 'warn' : 'success'
+        );
       } catch (e) { stateEl.innerHTML = `<div class="ts-lib-empty error">${escapeHtml(e.message || String(e))}</div>`; }
     };
     overlay.querySelector('#ts-intents-refresh')?.addEventListener('click', load);
@@ -2684,7 +2779,7 @@ export class TrueStudioManager {
       `${enabled ? 'تفعيل' : 'إيقاف'} Privileged Intents — الخادم يعالج كل البوتات`
     );
     prog.setIndeterminate(true);
-    prog.setStatus('⏳ جاري الاتصال بالخادم وقراءة المكتبة…');
+    prog.setStatus('جاري الاتصال بالخادم وقراءة المكتبة…');
 
     // Single server call: one health probe + process all bots with skip-already-enabled logic
     window.electronAPI.tsApplyIntentsAll(this.selectedEmail, enabled, selectedIds).then(r => {
@@ -2703,7 +2798,7 @@ export class TrueStudioManager {
       prog.error(e.message || String(e));
     }).finally(() => {
       this._intentsAllRunning = false;
-      if (btn) { btn.disabled = false; }
+      this._syncLibraryBulkButtons();
     });
   }
 
@@ -2732,10 +2827,14 @@ export class TrueStudioManager {
 
     let total = 0;
     const log = wrap.querySelector('#ts-bp-log');
-    const addLogLine = (icon, name, note = '') => {
+    const addLogLine = (kind, name, note = '') => {
       const line = document.createElement('div');
-      line.className = 'ts-bp-log-line' + (icon === '✓' ? ' ok' : icon === '✗' ? ' fail' : '');
-      line.textContent = `${icon} ${name}${note ? ' — ' + note.slice(0, 90) : ''}`;
+      line.className = 'ts-bp-log-line ' + (kind === 'ok' ? 'ok' : kind === 'fail' ? 'fail' : kind === 'skip' ? 'skip' : 'info');
+      const glyph = kind === 'ok' ? icon('check', 'ts-inline-icon')
+        : kind === 'fail' ? icon('x', 'ts-inline-icon')
+          : kind === 'skip' ? icon('refresh', 'ts-inline-icon')
+            : icon('info', 'ts-inline-icon');
+      line.innerHTML = `${glyph}<span>${escapeHtml(name)}${note ? ` — ${escapeHtml(String(note).slice(0, 90))}` : ''}</span>`;
       log.prepend(line);
       if (log.children.length > 60) log.lastChild?.remove();
     };
@@ -2772,21 +2871,25 @@ export class TrueStudioManager {
         if (bar) bar.style.width = pct + '%';
         wrap.querySelector('#ts-bp-counts').textContent = `${done} / ${total}`;
       },
-      logLine(icon, name, note = '') { addLogLine(icon, name, note); },
+      logLine(kind, name, note = '') { addLogLine(kind, name, note); },
       done(ok, fail, items = [], skipped = 0) {
         const bar = wrap.querySelector('#ts-bp-bar');
         if (bar) { bar.classList.remove('indeterminate'); bar.style.width = '100%'; bar.classList.add('done'); }
         const status = wrap.querySelector('#ts-bp-status');
         if (status) {
-          const skippedPart = skipped > 0 ? `  <span class="ts-bp-skip">↷ ${skipped} تم تخطيه</span>` : '';
-          status.innerHTML = `<span class="ts-bp-ok">✓ ${ok - skipped} نجاح</span>${skippedPart}  <span class="ts-bp-fail">✗ ${fail} فشل</span>`;
+          const parts = [
+            `<span class="ts-bp-ok">${icon('check', 'ts-inline-icon')} ${Math.max(0, ok - skipped)} نجاح</span>`,
+          ];
+          if (skipped > 0) parts.push(`<span class="ts-bp-skip">${icon('refresh', 'ts-inline-icon')} ${skipped} تم تخطيه</span>`);
+          parts.push(`<span class="ts-bp-fail">${icon('x', 'ts-inline-icon')} ${fail} فشل</span>`);
+          status.innerHTML = parts.join('');
         }
         // Log results (only if not already populated)
         const logEl = wrap.querySelector('#ts-bp-log');
         if (logEl && !logEl.children.length) {
           [...items].reverse().forEach(x => {
-            if (x.skipped) addLogLine('↷', x.name, 'مفعّل بالفعل');
-            else addLogLine(x.ok ? '✓' : '✗', x.name, x.error);
+            if (x.skipped) addLogLine('skip', x.name, 'مفعّل بالفعل');
+            else addLogLine(x.ok ? 'ok' : 'fail', x.name, x.error);
           });
         }
         const closeBtn = wrap.querySelector('#ts-bp-close');
@@ -2798,7 +2901,7 @@ export class TrueStudioManager {
         const bar = wrap.querySelector('#ts-bp-bar');
         if (bar) bar.classList.remove('indeterminate');
         const status = wrap.querySelector('#ts-bp-status');
-        if (status) status.innerHTML = `<span class="ts-bp-fail">✗ ${msg}</span>`;
+        if (status) status.innerHTML = `<span class="ts-bp-fail">${icon('x', 'ts-inline-icon')} ${escapeHtml(msg)}</span>`;
         const closeBtn = wrap.querySelector('#ts-bp-close');
         if (closeBtn) closeBtn.style.display = '';
       },
@@ -2872,7 +2975,7 @@ export class TrueStudioManager {
       await this._loadBotTokens();
       this._updateTokensTabBadge();
       progress.success();
-      showNotification(t('ts.token_reset_ok') || 'New bot token generated ✓', 'success');
+      showNotification(t('ts.token_reset_ok') || 'New bot token generated', 'success');
       sfx.ding?.();
       // Token modal is rendered ON TOP of the library overlay (z-index handled
       // in CSS) so the user stays on the same page — no "press back" needed.
@@ -2888,7 +2991,7 @@ export class TrueStudioManager {
       const looksLikeMfa = /two[-\s]?factor|mfa|2fa|60003|enable.*2fa/i.test(raw);
       const msg = looksLikeMfa
         ? (t('ts.token_reset_needs_mfa') ||
-           'Discord requires the account to have 2FA enabled and its TOTP secret saved here. Edit the account → add the 2FA secret → retry.')
+           'Discord requires the account to have 2FA enabled and its TOTP secret saved here. Edit the account, add the 2FA secret, then retry.')
         : (t('ts.token_reset_failed') || 'Token reset failed') + ': ' + raw;
       showNotification(msg, 'error');
     } finally {
@@ -2932,7 +3035,7 @@ export class TrueStudioManager {
       success: () => {
         wrap.classList.add('done');
         const title = wrap.querySelector('.ts-reset-progress-title');
-        if (title) title.textContent = t('ts.token_reset_ok') || 'New bot token generated ✓';
+        if (title) title.textContent = t('ts.token_reset_ok') || 'New bot token generated';
         setTimeout(() => { wrap.classList.remove('open'); setTimeout(() => wrap.remove(), 240); }, 600);
       },
       fail: (msg) => {
@@ -2984,7 +3087,7 @@ export class TrueStudioManager {
       <div class="ts-token-modal">
         <div class="ts-token-modal-head">
           <div class="ts-token-modal-title">${escapeHtml(t('ts.new_token_modal_title') || 'New bot token')}</div>
-          <button class="ts-token-modal-close" type="button" aria-label="close">×</button>
+          <button class="ts-token-modal-close" type="button" aria-label="close">${icon('x', 'ts-inline-icon')}</button>
         </div>
         <div class="ts-token-modal-body">
           <div class="ts-token-modal-bot">${escapeHtml(name)} <span class="ts-token-modal-id">${escapeHtml(appId)}</span></div>
@@ -3080,7 +3183,7 @@ export class TrueStudioManager {
         try {
           await copyToClipboard(lines);
           const orig = copyAllBtn.innerHTML;
-          copyAllBtn.innerHTML = `<span style="font-size:14px;">✅</span> ${escapeHtml(t('ts.bt_copy_all_done'))}`;
+          copyAllBtn.innerHTML = `${icon('check', 'ts-inline-icon')} ${escapeHtml(t('ts.bt_copy_all_done'))}`;
           setTimeout(() => { copyAllBtn.innerHTML = orig; }, 1800);
         } catch (e) { showNotification(t('ts.copy_failed') || 'Copy failed', 'error'); }
       });
@@ -3133,15 +3236,7 @@ export class TrueStudioManager {
         const count = this.botTokens.length;
         tab.innerHTML = `${icon('key', 'ts-tab-icon')} ${escapeHtml(t('ts.lib_tab_tokens'))}${count ? ` <span class="ts-tab-badge">${count}</span>` : ''}`;
       }
-      const resetAllBtn = this._libModal.querySelector('#ts-lib-reset-all');
-      const stopAllBtn  = this._libModal.querySelector('#ts-lib-stop-all');
-      if (resetAllBtn) {
-        resetAllBtn.disabled = !this.library || this._resetAllInFlight;
-        resetAllBtn.style.display = this._resetAllInFlight ? 'none' : '';
-      }
-      if (stopAllBtn) {
-        stopAllBtn.style.display = this._resetAllInFlight ? '' : 'none';
-      }
+      this._syncLibraryBulkButtons();
     }
   }
 
@@ -3237,18 +3332,28 @@ export class TrueStudioManager {
         </div>
         <div class="ts-reset-all-counts" id="ts-ra-counts">0 / ${total}</div>
         <div class="ts-reset-all-log" id="ts-ra-log"></div>
+        <div class="ts-reset-all-actions">
+          <button class="ts-btn ts-reset-all-close" id="ts-ra-close" style="display:none">${icon('x', 'ts-inline-icon')} ${escapeHtml(t('ts.close') || 'إغلاق')}</button>
+        </div>
       </div>
     `;
     document.body.appendChild(wrap);
     requestAnimationFrame(() => wrap.classList.add('open'));
+    wrap.querySelector('#ts-ra-close')?.addEventListener('click', () => {
+      wrap.classList.remove('open');
+      setTimeout(() => wrap.remove(), 280);
+    });
 
     let doneCount = 0;
-    const addLog = (icon, name, note = '') => {
+    const addLog = (kind, name, note = '') => {
       const log = wrap.querySelector('#ts-ra-log');
       if (!log) return;
       const line = document.createElement('div');
-      line.className = 'ts-ra-log-line';
-      line.textContent = `${icon} ${name}${note ? ' — ' + note.slice(0, 80) : ''}`;
+      line.className = `ts-ra-log-line ${kind === 'ok' ? 'ok' : kind === 'fail' ? 'fail' : 'info'}`;
+      const glyph = kind === 'ok' ? icon('check', 'ts-inline-icon')
+        : kind === 'fail' ? icon('x', 'ts-inline-icon')
+          : icon('info', 'ts-inline-icon');
+      line.innerHTML = `${glyph}<span>${escapeHtml(name)}${note ? ` — ${escapeHtml(String(note).slice(0, 80))}` : ''}</span>`;
       log.prepend(line);
       if (log.children.length > 30) log.lastChild?.remove();
     };
@@ -3263,18 +3368,30 @@ export class TrueStudioManager {
       success(idx, name) {
         doneCount++;
         const ct = wrap.querySelector('#ts-ra-counts');
-        if (ct) ct.textContent = `✓ ${doneCount} / ${total}`;
-        addLog('✓', name);
+        if (ct) ct.textContent = `${doneCount} / ${total}`;
+        addLog('ok', name, 'تم إنشاء التوكن');
       },
       fail(idx, name, msg) {
-        addLog('✗', name, msg);
+        addLog('fail', name, msg);
       },
       done(results) {
+        const remaining = Number(results.remaining || 0);
+        const hasIssues = results.state !== 'done' || Number(results.failed || 0) > 0 || remaining > 0;
         const el = wrap.querySelector('#ts-ra-current');
-        if (el) el.textContent = t('ts.reset_all_done_label').replace('{ok}', results.ok).replace('{failed}', results.failed);
+        if (el) {
+          const base = results.state === 'cancelled'
+            ? 'تم إيقاف العملية'
+            : results.state === 'error'
+              ? 'توقفت العملية بسبب خطأ'
+              : t('ts.reset_all_done_label').replace('{ok}', results.ok).replace('{failed}', results.failed);
+          const reason = results.lastError ? ` — ${String(results.lastError).slice(0, 160)}` : '';
+          el.textContent = `${base}${remaining ? ` — المتبقي ${remaining}` : ''}${reason}`;
+        }
         const bar = wrap.querySelector('#ts-ra-bar');
         if (bar) { bar.style.width = '100%'; bar.classList.add('done'); }
-        setTimeout(() => {
+        const closeBtn = wrap.querySelector('#ts-ra-close');
+        if (closeBtn) closeBtn.style.display = hasIssues ? '' : 'none';
+        if (!hasIssues) setTimeout(() => {
           wrap.classList.remove('open');
           setTimeout(() => wrap.remove(), 300);
         }, 3000);
@@ -3453,7 +3570,7 @@ export class TrueStudioManager {
         data-reset-bot="${escapeAttr(a.id)}"
         data-bot-name="${escapeAttr(a.name)}"
         title="${escapeAttr(t('ts.reset_token'))}">
-        <span class="ts-card-reset-icon" aria-hidden="true">⟳</span>
+        ${icon('refresh', 'ts-card-reset-icon')}
         <span class="ts-card-reset-label">${escapeHtml(t('ts.reset_token'))}</span>
       </button>` : '';
     // Check if all 3 privileged intents are already enabled (limited or approved flags)
@@ -3476,7 +3593,7 @@ export class TrueStudioManager {
         data-invite-bot="${escapeAttr(a.id)}"
         data-bot-name="${escapeAttr(a.name)}"
         title="رابط دعوة البوت / إضافة تلقائية للسيرفر">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        ${icon('link', 'ts-card-invite-icon')}
         دعوة
       </button>` : '';
     const moveBtn = opts.showMoveToTeam ? `
@@ -3637,7 +3754,7 @@ export class TrueStudioManager {
       const teamId = select?.value;
       if (!teamId) return;
       const ok = await showConfirm(
-        `${t('ts.move_to_team_warn') || 'This is permanent'}\n\n"${appName}" → "${teams.find(x => x.id === teamId)?.name || teamId}"`,
+        `${t('ts.move_to_team_warn') || 'This is permanent'}\n\n"${appName}" إلى "${teams.find(x => x.id === teamId)?.name || teamId}"`,
         { confirmText: t('ts.move_to_team_confirm') }
       );
       if (!ok) return;
@@ -4158,6 +4275,8 @@ export class TrueStudioManager {
         personal: r.personal || [],
         totals: r.totals || {},
         currentUserId: r.currentUserId || null,
+        complete: r.complete !== false,
+        warnings: Array.isArray(r.warnings) ? r.warnings : [],
       };
       this.currentUserId = r.currentUserId || null;
       this.libraryEmail = this.selectedEmail;
@@ -4186,16 +4305,7 @@ export class TrueStudioManager {
           ? (t('ts.testing') || '...')
           : (t('ts.lib_refresh') || 'تحديث');
       }
-      // Always sync Reset All / Stop button states after library load/clear
-      const resetAllBtn = this._libModal.querySelector('#ts-lib-reset-all');
-      const stopAllBtn  = this._libModal.querySelector('#ts-lib-stop-all');
-      if (resetAllBtn) {
-        resetAllBtn.disabled = !this.library || this._resetAllInFlight;
-        resetAllBtn.style.display = this._resetAllInFlight ? 'none' : '';
-      }
-      if (stopAllBtn) {
-        stopAllBtn.style.display = this._resetAllInFlight ? '' : 'none';
-      }
+      this._syncLibraryBulkButtons();
       this._renderLibraryTab();
     }
   }

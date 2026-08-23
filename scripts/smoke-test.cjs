@@ -19,6 +19,43 @@ async function json(path, options) {
   assert.equal(profiles.res.status, 200, 'profiles should be reachable');
   assert.equal(profiles.body?.success, true, 'profiles should succeed');
 
+  const missingLibrary = await json('/api/ts/library');
+  assert.equal(missingLibrary.res.status, 200, 'library validation should return JSON');
+  assert.equal(missingLibrary.body?.success, false, 'library without account should fail safely');
+
+  const unknownLibrary = await json('/api/ts/library?email=smoke%40invalid.test');
+  assert.equal(unknownLibrary.body?.success, false, 'library with unknown account should fail safely');
+
+  const teamsWithoutEmail = await json('/api/ts/teams');
+  assert.equal(teamsWithoutEmail.body?.success, false, 'teams without account should fail safely');
+
+  const createTeamWithoutAccount = await json('/api/ts/teams/create', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'smoke@invalid.test', name: 'Smoke Team' }),
+  });
+  assert.equal(createTeamWithoutAccount.body?.success, false, 'team creation without saved account should fail safely');
+
+  const addAppInvalid = await json('/api/ts/teams/team/add-app', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'smoke@invalid.test' }),
+  });
+  assert.equal(addAppInvalid.body?.success, false, 'team app transfer with invalid payload should fail safely');
+
+  const startInvalid = await json('/api/ts/start', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(startInvalid.body?.success, false, 'invalid session start should fail safely');
+
+  const resetStartInvalid = await json('/api/ts/reset-all/start', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'smoke@invalid.test', bots: [] }),
+  });
+  assert.equal(resetStartInvalid.body?.success, false, 'invalid Reset All payload should fail safely');
+
+  const resetStopIdle = await json('/api/ts/reset-all/stop', { method: 'POST' });
+  assert.equal(resetStopIdle.body?.success, true, 'Reset All stop should be safe while idle');
+
   const profile = await json('/api/ts/profiles', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'Smoke Profile', config: { rules: { createBots: true }, count: 2, prefix: 'Smoke' } }),

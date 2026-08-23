@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test:smoke": "node scripts/smoke-test.cjs"
+    "test:smoke": "node scripts/smoke-test.cjs",
+    "test:operations": "node scripts/operations-logic-test.cjs"
   },
   "dependencies": {
     "axios": "^1.19.0",
