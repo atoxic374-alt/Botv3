@@ -428,10 +428,11 @@ export class TrueStudioManager {
 
         <nav class="ts-section-nav" aria-label="${escapeAttr(t('ts.ui_section_nav') || 'أقسام الواجهة')}">
           <a href="#ts-cat-overview" class="ts-section-nav-item active"><span class="ts-nav-index">00</span><span>${escapeHtml(t('ts.ui_overview') || 'نظرة عامة')}</span></a>
-          <a href="#ts-cat-setup" class="ts-section-nav-item"><span class="ts-nav-index">01</span><span>${escapeHtml(t('ts.ui_setup') || 'الإعداد')}</span></a>
-          <a href="#ts-cat-automation" class="ts-section-nav-item"><span class="ts-nav-index">02</span><span>${escapeHtml(t('ts.ui_automation') || 'التشغيل')}</span></a>
-          <a href="#ts-cat-assets" class="ts-section-nav-item"><span class="ts-nav-index">03</span><span>${escapeHtml(t('ts.ui_assets') || 'الهوية والحماية')}</span></a>
-          <a href="#ts-cat-reports" class="ts-section-nav-item"><span class="ts-nav-index">04</span><span>${escapeHtml(t('ts.ui_reports') || 'السجل والمكتبة')}</span></a>
+          <a href="#ts-cat-accounts" class="ts-section-nav-item"><span class="ts-nav-index">01</span><span>${escapeHtml(t('ts.ui_accounts') || 'الحسابات')}</span></a>
+          <a href="#ts-cat-setup" class="ts-section-nav-item"><span class="ts-nav-index">02</span><span>${escapeHtml(t('ts.ui_setup') || 'الإعداد')}</span></a>
+          <a href="#ts-cat-automation" class="ts-section-nav-item"><span class="ts-nav-index">03</span><span>${escapeHtml(t('ts.ui_automation') || 'التشغيل')}</span></a>
+          <a href="#ts-cat-assets" class="ts-section-nav-item"><span class="ts-nav-index">04</span><span>${escapeHtml(t('ts.ui_assets') || 'الهوية والحماية')}</span></a>
+          <a href="#ts-cat-reports" class="ts-section-nav-item"><span class="ts-nav-index">05</span><span>${escapeHtml(t('ts.ui_reports') || 'السجل والمكتبة')}</span></a>
         </nav>
 
         <section class="ts-category ts-category-overview" id="ts-cat-overview">
@@ -462,25 +463,29 @@ export class TrueStudioManager {
           <div id="ts-account-pool">${this._renderAccountPool(s)}</div>
         </section>
 
-        <section class="ts-category" id="ts-cat-setup">
+        <section class="ts-category ts-category-accounts" id="ts-cat-accounts">
           <div class="ts-category-heading">
-            <div><span class="ts-category-number">01</span><h2>${escapeHtml(t('ts.ui_setup') || 'الإعداد الأساسي')}</h2></div>
-            <p>${escapeHtml(t('ts.ui_setup_desc') || 'اختر الحساب وحدد طريقة الدخول قبل ضبط أي خيارات إضافية.')}</p>
+            <div><span class="ts-category-number">01</span><h2>${escapeHtml(t('ts.ui_accounts') || 'الحسابات')}</h2></div>
+            <p>${escapeHtml(t('ts.ui_accounts_desc') || 'اربط حسابات Discord الموجودة فقط، من دون إنشاء حسابات جديدة.')}</p>
           </div>
-          <div class="ts-category-grid ts-category-grid-setup">
+          <div class="ts-account-connect-banner">
+            <span class="ts-account-connect-dot" aria-hidden="true"></span>
+            <div><strong>${escapeHtml(t('ts.connect_existing_title') || 'الاتصال بحساب موجود')}</strong><span>${escapeHtml(t('ts.connect_existing_hint') || 'يُستخدم هذا القسم لربط الحساب وتخزين بيانات الوصول محلياً فقط.')}</span></div>
+          </div>
+          <div class="ts-category-grid ts-category-grid-accounts">
             <div class="ts-category-primary">
               <div class="ts-card ts-accounts-card">
                 <div class="ts-card-head">
                   <div class="ts-card-title ar">${t('ts.accounts_section')}</div>
-                  <span class="ts-card-step">01 / ACCOUNT</span>
+                  <span class="ts-card-step">01 / CONNECT</span>
                 </div>
                 <div class="ts-field">
                   <div class="ts-field-label">${t('ts.active_account')}</div>
                   <div class="ts-account-row">
                     <button class="ts-btn danger" id="ts-acct-delete" ${sel ? '' : 'disabled'}>${t('ts.delete')}</button>
-                    <button class="ts-btn mint" id="ts-acct-save">${t('ts.save_account')}</button>
+                    <button class="ts-btn mint" id="ts-acct-save">${t('ts.connect_account')}</button>
                     <select class="ts-select" id="ts-acct-select">
-                      <option value="">${t('ts.choose_or_add')}</option>
+                      <option value="">${t('ts.choose_account')}</option>
                       ${this.accounts.map(a => `
                         <option value="${escapeAttr(a.email)}" ${a.email === this.selectedEmail ? 'selected' : ''}>${this._optionLabel(a)}</option>
                       `).join('')}
@@ -488,14 +493,16 @@ export class TrueStudioManager {
                   </div>
                   <div class="ts-account-row" style="margin-top:8px;">
                     <button class="ts-btn" id="ts-acct-test" ${sel ? '' : 'disabled'}>${t('ts.test_account')}</button>
-                    <button class="ts-btn" id="ts-acct-test-all" ${this.accounts.length ? '' : 'disabled'}>${icon('shield', 'ts-inline-icon')} فحص الكل</button>
+                    <button class="ts-btn" id="ts-acct-test-all" ${this.accounts.length ? '' : 'disabled'}>${icon('shield', 'ts-inline-icon')} ${t('ts.test_all_accounts')}</button>
                     <div></div>
                     <div id="ts-verify-info" class="ts-verify-info">${this._verifyLabel(sel)}</div>
                   </div>
-                  ${this.accounts.length === 0 ? `<div class="ts-account-empty">${t('ts.no_accounts_yet')}</div>` : ''}
+                  ${this.accounts.length === 0 ? `<div class="ts-account-empty">${t('ts.no_connected_accounts')}</div>` : ''}
                 </div>
               </div>
+            </div>
 
+            <div class="ts-category-secondary">
               <div class="ts-card ts-credentials-card">
                 <div class="ts-card-head">
                   <div class="ts-card-title ar">${t('ts.account_data')}</div>
@@ -521,9 +528,9 @@ export class TrueStudioManager {
                       <input type="email" id="ts-email" class="ts-input ltr" value="${escapeAttr(this.form.email)}" placeholder="name@example.com" autocomplete="off" />
                     </div>
                     <div class="ts-field ts-required-field">
-                      <div class="ts-field-label">Password <span class="ts-required-mark" aria-hidden="true">*</span></div>
-                      <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" aria-required="true" />
-                      <div class="ts-field-hint">${escapeHtml(t('ts.password_saved_hint'))}</div>
+                      <div class="ts-field-label">Password</div>
+                      <input type="password" id="ts-password" class="ts-input ltr" value="" placeholder="${sel?.hasPassword ? '••••••••' : ''}" autocomplete="off" aria-required="false" />
+                      <div class="ts-field-hint">${escapeHtml(t('ts.password_connect_hint'))}</div>
                     </div>
                     <div class="ts-field ts-method-totp">
                       <div class="ts-field-label">2FA Secret</div>
@@ -533,16 +540,22 @@ export class TrueStudioManager {
                 </details>
               </div>
             </div>
-            <aside class="ts-category-secondary ts-setup-tools">
-              ${this._renderProfilesCard()}
-              ${this._renderBulkTokenCard()}
-            </aside>
+          </div>
+        </section>
+
+        <section class="ts-category" id="ts-cat-setup">
+          <div class="ts-category-heading">
+            <div><span class="ts-category-number">02</span><h2>${escapeHtml(t('ts.ui_setup') || 'الإعداد الأساسي')}</h2></div>
+            <p>${escapeHtml(t('ts.ui_setup_desc') || 'اختر إعداد التشغيل قبل ضبط خيارات الأتمتة.')}</p>
+          </div>
+          <div class="ts-category-grid ts-category-grid-setup">
+            <div class="ts-category-primary">${this._renderProfilesCard()}</div>
           </div>
         </section>
 
         <section class="ts-category" id="ts-cat-automation">
           <div class="ts-category-heading">
-            <div><span class="ts-category-number">02</span><h2>${escapeHtml(t('ts.ui_automation') || 'التشغيل')}</h2></div>
+            <div><span class="ts-category-number">03</span><h2>${escapeHtml(t('ts.ui_automation') || 'التشغيل')}</h2></div>
             <p>${escapeHtml(t('ts.ui_automation_desc') || 'رتّب خط سير التنفيذ ثم اختر السرعة والاتصال وابدأ من هنا.')}</p>
           </div>
           <div class="ts-category-grid ts-category-grid-automation">
@@ -595,7 +608,7 @@ export class TrueStudioManager {
 
         <section class="ts-category" id="ts-cat-assets">
           <div class="ts-category-heading">
-            <div><span class="ts-category-number">03</span><h2>${escapeHtml(t('ts.ui_assets') || 'الهوية والحماية')}</h2></div>
+            <div><span class="ts-category-number">04</span><h2>${escapeHtml(t('ts.ui_assets') || 'الهوية والحماية')}</h2></div>
             <p>${escapeHtml(t('ts.ui_assets_desc') || 'خصص شكل البوتات واضبط الحماية فقط عند الحاجة.')}</p>
           </div>
           <div class="ts-category-grid ts-category-grid-assets">
@@ -606,7 +619,7 @@ export class TrueStudioManager {
 
         <section class="ts-category" id="ts-cat-reports">
           <div class="ts-category-heading">
-            <div><span class="ts-category-number">04</span><h2>${escapeHtml(t('ts.ui_reports') || 'السجل والمكتبة')}</h2></div>
+            <div><span class="ts-category-number">05</span><h2>${escapeHtml(t('ts.ui_reports') || 'السجل والمكتبة')}</h2></div>
             <p>${escapeHtml(t('ts.ui_reports_desc') || 'راجع النتائج الحية، وافتح المكتبة لإدارة البوتات والتقارير.')}</p>
           </div>
           <div class="ts-category-grid ts-category-grid-reports">
@@ -4129,7 +4142,7 @@ export class TrueStudioManager {
     $('#ts-lib-refresh')?.addEventListener('click', () => this.loadLibrary());
     // Open the full-screen library overlay (Teams / Personal / Created tabs)
     $('#ts-lib-open')?.addEventListener('click', () => this._openLibraryModal('teams'));
-    $('#ts-acct-save')?.addEventListener('click', () => this.saveAccount());
+    $('#ts-acct-save')?.addEventListener('click', () => this.connectAccount());
     $('#ts-acct-delete')?.addEventListener('click', () => this.deleteAccount());
     $('#ts-acct-test')?.addEventListener('click', () => this.testAccount());
 
@@ -4389,7 +4402,7 @@ export class TrueStudioManager {
   }
 
   // ── Actions ───────────────────────────────────────────
-  async saveAccount() {
+  async connectAccount() {
     const email = (this.form.email || '').trim().toLowerCase();
     if (!email || !email.includes('@')) {
       showNotification(t('ts.invalid_email'), 'error');
@@ -4398,28 +4411,28 @@ export class TrueStudioManager {
     const selected = this.accounts.find(a => String(a.email || '').toLowerCase() === email);
     const hasSavedPassword = selected?.hasPassword === true;
     const enteredPassword = typeof this.form.password === 'string' ? this.form.password : '';
-    if (!enteredPassword.trim() && !hasSavedPassword) {
+    const enteredToken = typeof this.form.directToken === 'string' ? this.form.directToken : '';
+    if (!enteredPassword.trim() && !hasSavedPassword && !enteredToken.trim() && !selected?.hasDirectToken) {
       showNotification(t('ts.password_required'), 'error');
       this.contentArea.querySelector('.ts-method-collapsible')?.setAttribute('open', '');
       this.contentArea.querySelector('#ts-password')?.focus();
       return;
     }
     const payload = { email };
-    // Only send fields if user typed them (so editing doesn't wipe existing creds)
+    // Only send fields if the user typed them, so reconnecting does not clear saved credentials.
     if (enteredPassword.trim()) payload.password = enteredPassword;
     if (this.form.totpSecret) payload.totpSecret = this.form.totpSecret;
-    if (this.form.directToken) payload.directToken = this.form.directToken;
+    if (enteredToken.trim()) payload.directToken = enteredToken;
     try {
       await window.electronAPI.tsSaveAccount(payload);
-      showNotification(t('ts.account_saved'), 'success');
       this.selectedEmail = email;
       this.form.password = '';
       this.form.totpSecret = '';
       this.form.directToken = '';
       await this.refresh();
-      this.render();
+      await this.testAccount();
     } catch (e) {
-      showNotification(e.message || 'Save failed', 'error');
+      showNotification(e.message || 'Connection failed', 'error');
     }
   }
 

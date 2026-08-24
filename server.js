@@ -351,11 +351,8 @@ const ts = require('./lib/trueStudio');
     const hit = tsCachedToken(email);
     if (hit) return hit;
     const acct = tsFindAccount(email);
-    if (!acct) throw new Error('Account not found — save it first');
+    if (!acct) throw new Error('Account not connected — connect it first');
     const creds = tsDecryptAccount(acct);
-    if (!isTsBulkTokenAccount(creds.email) && !creds.password) {
-      throw new Error('Password is required for this account, even when using a direct token');
-    }
 
     // ── Option A: Direct token (warm client, skip login) ──────────
     if (creds.directToken) {
@@ -373,7 +370,7 @@ const ts = require('./lib/trueStudio');
     }
 
     // ── Option B: Email + password login ─────────────────────────
-    if (!creds.password) throw new Error('Saved account has no password and no direct token — re-save it');
+    if (!creds.password) throw new Error('Saved connection has no password or direct token — reconnect it');
     const client = ts.createClient();
     const netOpts = { solveCaptcha: buildSolveCaptcha(), client };
     const r = await ts.login({ email: creds.email, password: creds.password, totpSecret: creds.totpSecret, netOpts });
@@ -1283,14 +1280,17 @@ const ts = require('./lib/trueStudio');
     const d = ensureData();
     if (!Array.isArray(d.tsAccounts)) d.tsAccounts = [];
     let rec = tsFindAccount(cleanEmail);
-    const existingPassword = rec ? tsDecryptAccount(rec)?.password || '' : '';
+    const existingCreds = rec ? tsDecryptAccount(rec) : null;
+    const existingPassword = existingCreds?.password || '';
+    const existingDirectToken = existingCreds?.directToken || '';
     const incomingPassword = typeof password === 'string' ? password : '';
+    const incomingDirectToken = typeof directToken === 'string' ? directToken.trim() : '';
     const hasIncomingPassword = incomingPassword.trim().length > 0;
-    // A direct token does not bypass the account-password requirement. For an
-    // existing account, an already-saved password may be kept by omitting the
-    // field; a new account (or a legacy account without one) must provide it.
-    if (!hasIncomingPassword && !existingPassword.trim()) {
-      return fail(res, new Error('Password is required, even when a direct token is provided'));
+    // Connecting an existing Discord account can use either a direct user token
+    // or email + password. Credentials are stored locally; this endpoint never
+    // creates a Discord account.
+    if (!hasIncomingPassword && !existingPassword.trim() && !incomingDirectToken && !existingDirectToken.trim()) {
+      return fail(res, new Error('Enter a password or a Discord user token to connect this account'));
     }
     if (!rec) {
       rec = { email: cleanEmail, password: '', totpSecret: '', directToken: '', addedAt: Date.now() };

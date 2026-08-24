@@ -4689,3 +4689,27 @@ body.light-theme .ts-team-2fa-lock { color: #9a6500; }
   .ts-app-card.selected,
   .ts-app-card .ts-card-action { transition: none; transform: none; }
 }
+
+
+/* ── Existing-account connection section ─────────────────────────────────── */
+.ts-category-grid-accounts { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.ts-account-connect-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -3px 0 14px;
+  padding: 10px 13px;
+  border: 1px solid rgba(124,224,196,.18);
+  border-radius: 12px;
+  background: linear-gradient(110deg, rgba(124,224,196,.09), rgba(88,101,242,.08));
+  color: var(--ts-text);
+}
+.ts-account-connect-banner strong { display: block; color: #dcfff4; font-size: 12px; }
+.ts-account-connect-banner span:not(.ts-account-connect-dot) { display: block; margin-top: 2px; color: var(--ts-muted); font-size: 10px; line-height: 1.5; }
+.ts-account-connect-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--ts-mint); box-shadow: 0 0 0 5px rgba(124,224,196,.1), 0 0 13px rgba(124,224,196,.65); }
+body.light-theme .ts-account-connect-banner { border-color: rgba(11,128,104,.2); background: linear-gradient(110deg, rgba(11,128,104,.1), rgba(88,101,242,.06)); }
+body.light-theme .ts-account-connect-banner strong { color: #0b5e4e; }
+body.light-theme .ts-account-connect-banner span:not(.ts-account-connect-dot) { color: #55716b; }
+@media (max-width: 760px) {
+  .ts-category-grid-accounts { grid-template-columns: 1fr; }
+}

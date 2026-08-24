@@ -32,10 +32,10 @@ async function json(path, options) {
 
   const tokenWithoutPassword = await json('/api/ts/accounts', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'smoke-token-only@example.invalid', directToken: 'fake-token' }),
+    body: JSON.stringify({ email: 'smoke-token-only@example.invalid', directToken: 'fake-discord-user-token-1234567890' }),
   });
-  assert.equal(tokenWithoutPassword.body?.success, false, 'direct token account without password should be rejected');
-  assert.match(tokenWithoutPassword.body?.error || '', /Password is required/i, 'password requirement should be explicit');
+  assert.equal(tokenWithoutPassword.body?.success, true, 'existing account connection should accept a direct token without password');
+  assert.equal(tokenWithoutPassword.body?.account?.hasDirectToken, true, 'direct token connection should be stored');
 
   const normalizedToken = await json('/api/ts/accounts', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -123,7 +123,7 @@ async function json(path, options) {
 
   const removed = await json('/api/ts/profiles/' + encodeURIComponent(profileId), { method: 'DELETE' });
   assert.equal(removed.body?.success, true, 'profile should delete');
-  for (const email of ['smoke-normalized-token@example.invalid', 'smoke-short-token@example.invalid']) {
+  for (const email of ['smoke-token-only@example.invalid', 'smoke-normalized-token@example.invalid', 'smoke-short-token@example.invalid']) {
     await json('/api/ts/accounts/' + encodeURIComponent(email), { method: 'DELETE' });
   }
   console.log('Botv3 smoke tests passed');
