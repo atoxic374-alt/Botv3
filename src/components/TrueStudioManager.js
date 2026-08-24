@@ -83,6 +83,14 @@ export class TrueStudioManager {
     this.serverInviteUrl = '';
     this.serverJoinResult = null;
     this.serverCaptchaVerification = null;
+    this.nitroPostOpen = false;
+    this.nitroState = null;
+    this.nitroStateError = '';
+    this.nitroSelectedGuildId = '';
+    this.nitroInviteUrl = '';
+    this.nitroPostCount = 1;
+    this.nitroPostResult = null;
+    this._nitroTicker = null;
   }
 
   async init() {
@@ -379,6 +387,10 @@ export class TrueStudioManager {
         const until = Number(node.getAttribute('data-ts-account-hold-until') || 0);
         node.textContent = this._fmtMs(Math.max(0, until - Date.now()));
       });
+      const nitroRemaining = this.contentArea.querySelector('#ts-nitro-cooldown-remaining');
+      const nitroEndsAt = this.nitroState?.cooldown?.active ? this.nitroState.cooldown.endsAt : this.nitroState?.nextSlotCooldownAt;
+      const nitroEnds = nitroEndsAt ? Date.parse(nitroEndsAt) : 0;
+      if (nitroRemaining && nitroEnds) nitroRemaining.textContent = this._fmtNitroRemaining(Math.max(0, nitroEnds - Date.now()));
     }, 500);
   }
 
@@ -387,6 +399,17 @@ export class TrueStudioManager {
     const m = Math.floor(total / 60);
     const s = total % 60;
     return `${String(m).padStart(1, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  _fmtNitroRemaining(ms) {
+    let total = Math.max(0, Math.ceil(ms / 1000));
+    const days = Math.floor(total / 86400); total %= 86400;
+    const hours = Math.floor(total / 3600); total %= 3600;
+    const minutes = Math.floor(total / 60); const seconds = total % 60;
+    if (days) return `${days}d ${hours}h ${minutes}m`;
+    if (hours) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
   }
 
   _stateMeta(state) {
@@ -475,6 +498,11 @@ export class TrueStudioManager {
             <span class="ts-account-connect-dot" aria-hidden="true"></span>
             <div><strong>${escapeHtml(t('ts.connect_existing_title') || 'الاتصال بحساب موجود')}</strong><span>${escapeHtml(t('ts.connect_existing_hint') || 'يُستخدم هذا القسم لربط الحساب وتخزين بيانات الوصول محلياً فقط.')}</span></div>
           </div>
+          <div class="ts-nitro-post-trigger">
+            <button class="ts-btn mint" id="ts-nitro-post-open">${icon('zap', 'ts-inline-icon')} ${escapeHtml(t('ts.nitro_post_button'))}</button>
+            <span>${escapeHtml(t('ts.nitro_post_trigger_hint'))}</span>
+          </div>
+          ${this.nitroPostOpen ? this._renderNitroPostCard() : ''}
           <div class="ts-category-grid ts-category-grid-accounts">
             <div class="ts-category-primary">
               <div class="ts-card ts-accounts-card">
@@ -660,6 +688,52 @@ export class TrueStudioManager {
       </div>
     `;
     this._bind();
+  }
+
+  _renderNitroPostCard() {
+    const state = this.nitroState;
+    const cooldown = state?.cooldown;
+    const guilds = Array.isArray(state?.guilds) ? state.guilds : [];
+    const available = Array.isArray(state?.availableSlotIds) ? state.availableSlotIds.length : null;
+    const slotCooldownAt = state?.nextSlotCooldownAt || null;
+    const cooldownAt = cooldown?.active ? cooldown.endsAt : slotCooldownAt;
+    const cooldownActive = !!cooldownAt && Date.parse(cooldownAt) > Date.now();
+    const statusClass = this.nitroStateError ? 'warn' : (cooldownActive ? 'warn' : 'ok');
+    const cooldownEnds = cooldownAt ? new Date(cooldownAt).toLocaleString('ar-SA') : t('ts.nitro_cooldown_none');
+    return `<div class="ts-card ts-nitro-post-card" id="ts-nitro-post-card">
+      <div class="ts-card-head">
+        <div class="ts-card-title ar">${escapeHtml(t('ts.nitro_post_title'))}</div>
+        <span class="ts-card-step">NITRO / BOOST</span>
+      </div>
+      <div class="ts-nitro-post-headline">
+        <div><strong>${escapeHtml(t('ts.nitro_available_label'))}</strong><span id="ts-nitro-available">${available == null ? '—' : available}</span></div>
+        <div><strong>${escapeHtml(t('ts.nitro_cooldown_label'))}</strong><span class="ts-nitro-status-${statusClass}">${this.nitroStateError ? escapeHtml(this.nitroStateError) : (cooldownActive ? escapeHtml(t('ts.nitro_cooldown_active')) : escapeHtml(t('ts.nitro_cooldown_ready')))}</span></div>
+      </div>
+      <div class="ts-nitro-cooldown-row"><span>${escapeHtml(t('ts.nitro_cooldown_ends'))}: <b id="ts-nitro-cooldown-ends">${escapeHtml(cooldownEnds)}</b></span><span>${escapeHtml(t('ts.nitro_time_left'))}: <b id="ts-nitro-cooldown-remaining">${cooldownActive ? this._fmtNitroRemaining(Math.max(0, Date.parse(cooldownAt) - Date.now())) : '0s'}</b></span></div>
+      <div class="ts-nitro-post-fields">
+        <div class="ts-field"><div class="ts-field-label">${escapeHtml(t('ts.nitro_server_label'))}</div>
+          <select id="ts-nitro-guild" class="ts-input" ${guilds.length ? '' : 'disabled'}>
+            <option value="">${escapeHtml(guilds.length ? t('ts.nitro_choose_server') : t('ts.nitro_refresh_required'))}</option>
+            ${guilds.map(g => `<option value="${escapeAttr(g.id)}" ${g.id === this.nitroSelectedGuildId ? 'selected' : ''}>${escapeHtml(g.name)}${g.owner ? ` (${escapeHtml(t('ts.nitro_owner'))})` : ''}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ts-field"><div class="ts-field-label">${escapeHtml(t('ts.nitro_invite_label'))}</div>
+          <input id="ts-nitro-invite" type="url" class="ts-input ltr" value="${escapeAttr(this.nitroInviteUrl)}" placeholder="https://discord.gg/..." autocomplete="off" />
+        </div>
+        <div class="ts-field"><div class="ts-field-label">${escapeHtml(t('ts.nitro_count_label'))}</div>
+          <select id="ts-nitro-count" class="ts-input"><option value="1" ${this.nitroPostCount === 1 ? 'selected' : ''}>1</option><option value="2" ${this.nitroPostCount === 2 ? 'selected' : ''}>2</option></select>
+        </div>
+      </div>
+      <div class="ts-nitro-post-actions"><button class="ts-btn" id="ts-nitro-refresh">${escapeHtml(t('ts.nitro_refresh'))}</button><button class="ts-btn mint" id="ts-nitro-post-submit" ${this.selectedEmail && state && !this.nitroStateError ? '' : 'disabled'}>${escapeHtml(t('ts.nitro_post_submit'))}</button></div>
+      <div class="ts-nitro-post-hint">${escapeHtml(t('ts.nitro_post_hint'))}</div>
+      <div id="ts-nitro-post-result" class="ts-nitro-post-result">${this._renderNitroPostResult()}</div>
+    </div>`;
+  }
+
+  _renderNitroPostResult() {
+    if (!this.nitroPostResult) return `<span class="ts-server-result-idle">${escapeHtml(t('ts.nitro_post_idle'))}</span>`;
+    const result = this.nitroPostResult;
+    return `<span class="ts-server-result-${result.ok ? 'ok' : 'warn'}">${escapeHtml(result.message || '')}</span>`;
   }
 
   _renderServerCaptchaCheck() {
@@ -4180,6 +4254,12 @@ export class TrueStudioManager {
     });
     $('#ts-server-join')?.addEventListener('click', () => this.joinServer());
     $('#ts-server-captcha-check')?.addEventListener('click', () => this.verifyServerCaptchaKey());
+    $('#ts-nitro-post-open')?.addEventListener('click', () => this.openNitroPost());
+    $('#ts-nitro-refresh')?.addEventListener('click', () => this.loadNitroState());
+    $('#ts-nitro-guild')?.addEventListener('change', (e) => { this.nitroSelectedGuildId = e.target.value; this.nitroInviteUrl = ''; this.render(); });
+    $('#ts-nitro-invite')?.addEventListener('input', (e) => { this.nitroInviteUrl = e.target.value; if (e.target.value.trim()) { this.nitroSelectedGuildId = ''; } });
+    $('#ts-nitro-count')?.addEventListener('change', (e) => { this.nitroPostCount = Math.max(1, Math.min(2, Number(e.target.value) || 1)); });
+    $('#ts-nitro-post-submit')?.addEventListener('click', () => this.submitNitroPost());
 
     $('#ts-email')?.addEventListener('input', (e) => this.form.email = e.target.value.trim());
     $('#ts-password')?.addEventListener('input', (e) => this.form.password = e.target.value);
@@ -4468,6 +4548,61 @@ export class TrueStudioManager {
       await this.testAccount();
     } catch (e) {
       showNotification(e.message || 'Connection failed', 'error');
+    }
+  }
+
+  async openNitroPost() {
+    if (!this.selectedEmail) {
+      showNotification(t('ts.pick_account_first'), 'error');
+      return;
+    }
+    this.nitroPostOpen = true;
+    this.nitroState = null;
+    this.nitroStateError = '';
+    this.nitroPostResult = null;
+    this.render();
+    await this.loadNitroState();
+  }
+
+  async loadNitroState() {
+    if (!this.selectedEmail) return;
+    const refresh = this.contentArea?.querySelector('#ts-nitro-refresh');
+    if (refresh) { refresh.disabled = true; refresh.textContent = t('ts.nitro_loading'); }
+    try {
+      const r = await window.electronAPI.tsNitroStatus(this.selectedEmail);
+      if (!r?.success) throw new Error(r?.error || t('ts.nitro_status_failed'));
+      this.nitroState = r;
+      this.nitroStateError = '';
+      if (!r.guilds?.some(g => g.id === this.nitroSelectedGuildId)) this.nitroSelectedGuildId = '';
+    } catch (e) {
+      this.nitroState = null;
+      this.nitroStateError = e.message || t('ts.nitro_status_failed');
+    }
+    this.render();
+  }
+
+  async submitNitroPost() {
+    if (!this.selectedEmail) return showNotification(t('ts.pick_account_first'), 'error');
+    const guildId = this.nitroSelectedGuildId || '';
+    const inviteUrl = (this.nitroInviteUrl || '').trim();
+    if (!guildId && !inviteUrl) return showNotification(t('ts.nitro_target_required'), 'error');
+    const nitroCooldownAt = this.nitroState?.cooldown?.active ? this.nitroState.cooldown.endsAt : this.nitroState?.nextSlotCooldownAt;
+    if (nitroCooldownAt && Date.parse(nitroCooldownAt) > Date.now()) return showNotification(t('ts.nitro_cooldown_wait'), 'error');
+    const count = Math.max(1, Math.min(2, Number(this.nitroPostCount) || 1));
+    const btn = this.contentArea?.querySelector('#ts-nitro-post-submit');
+    if (btn) { btn.disabled = true; btn.textContent = t('ts.nitro_post_working'); }
+    this.nitroPostResult = { ok: false, message: t('ts.nitro_post_working') };
+    this.render();
+    try {
+      const r = await window.electronAPI.tsNitroPost(this.selectedEmail, guildId, inviteUrl, count);
+      this.nitroPostResult = { ok: r?.verified === true, message: r?.verified ? t('ts.nitro_post_verified') : t('ts.nitro_post_unverified') };
+      if (r?.state) this.nitroState = r.state;
+      else await this.loadNitroState();
+      showNotification(this.nitroPostResult.message, this.nitroPostResult.ok ? 'success' : 'warn');
+    } catch (e) {
+      this.nitroPostResult = { ok: false, message: e.message || t('ts.nitro_post_failed') };
+      showNotification(this.nitroPostResult.message, 'error');
+      this.render();
     }
   }
 

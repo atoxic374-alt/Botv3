@@ -4748,3 +4748,36 @@ body.light-theme .ts-captcha-auto-only { border-color: rgba(11,128,104,.18); col
   .ts-server-captcha-check { align-items: stretch; flex-direction: column; }
   .ts-server-captcha-check .ts-btn { width: 100%; }
 }
+
+
+/* ── Nitro boost panel ─────────────────────────────────────────────────────── */
+.ts-nitro-post-trigger { display: flex; align-items: center; gap: 12px; margin: 12px 0 0; }
+.ts-nitro-post-trigger > span { color: var(--ts-muted); font-size: 10px; }
+.ts-nitro-post-card { margin: 12px 0 14px; border-color: rgba(124,224,196,.2); }
+.ts-nitro-post-headline { display: grid; grid-template-columns: 160px minmax(0,1fr); gap: 10px; margin-bottom: 10px; }
+.ts-nitro-post-headline > div { display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; border-radius: 9px; background: rgba(124,224,196,.045); border: 1px solid rgba(124,224,196,.12); }
+.ts-nitro-post-headline strong { color: var(--ts-muted); font-size: 9px; font-weight: 600; }
+.ts-nitro-post-headline span { color: var(--ts-text); font-size: 12px; line-height: 1.45; }
+.ts-nitro-status-ok { color: var(--ts-mint) !important; }
+.ts-nitro-status-warn { color: #f3c565 !important; }
+.ts-nitro-cooldown-row { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; color: var(--ts-muted); background: rgba(126,184,245,.045); font-size: 10px; }
+.ts-nitro-cooldown-row b { color: var(--ts-text); font-weight: 600; }
+.ts-nitro-post-fields { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1.25fr) 120px; gap: 10px; }
+.ts-nitro-post-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.ts-nitro-post-hint, .ts-nitro-post-result { margin-top: 9px; color: var(--ts-muted); font-size: 10px; line-height: 1.6; }
+body.light-theme .ts-nitro-post-card { border-color: rgba(11,128,104,.22); }
+body.light-theme .ts-nitro-post-headline > div { background: rgba(11,128,104,.045); border-color: rgba(11,128,104,.15); }
+body.light-theme .ts-nitro-post-headline span, body.light-theme .ts-nitro-cooldown-row b { color: #16322d; }
+body.light-theme .ts-nitro-status-warn { color: #805300 !important; }
+@media (max-width: 700px) {
+  .ts-nitro-post-fields { grid-template-columns: 1fr 1fr; }
+  .ts-nitro-post-fields > :last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .ts-nitro-post-trigger, .ts-nitro-cooldown-row { align-items: stretch; flex-direction: column; }
+  .ts-nitro-post-headline { grid-template-columns: 1fr; }
+  .ts-nitro-post-fields { grid-template-columns: 1fr; }
+  .ts-nitro-post-fields > :last-child { grid-column: auto; }
+  .ts-nitro-post-actions { flex-direction: column-reverse; }
+  .ts-nitro-post-actions .ts-btn { width: 100%; }
+}

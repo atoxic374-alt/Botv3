@@ -43,6 +43,15 @@ async function json(path, options) {
   const unknownLibrary = await json('/api/ts/library?email=smoke%40invalid.test');
   assert.equal(unknownLibrary.body?.success, false, 'library with unknown account should fail safely');
 
+  const missingNitroStatusEmail = await json('/api/ts/nitro/status');
+  assert.equal(missingNitroStatusEmail.body?.success, false, 'Nitro status without an account should fail safely');
+
+  const missingNitroPostEmail = await json('/api/ts/nitro/post', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ count: 1 }),
+  });
+  assert.equal(missingNitroPostEmail.body?.success, false, 'Nitro post without an account should fail safely');
+
   const tokenWithoutPassword = await json('/api/ts/accounts', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'smoke-token-only@example.invalid', directToken: 'fake-discord-user-token-1234567890' }),

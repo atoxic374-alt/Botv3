@@ -89,6 +89,8 @@ window.electronAPI = {
   tsClearLog: () => apiCall('POST', '/api/ts/clear-log'),
   tsTestAccount: (email) => apiCall('POST', '/api/ts/test-account', { email }),
   tsJoinServer: (email, inviteUrl) => apiCall('POST', '/api/ts/join-server', { email, inviteUrl }),
+  tsNitroStatus: (email) => apiCall('GET', `/api/ts/nitro/status?email=${encodeURIComponent(email)}`),
+  tsNitroPost: (email, guildId, inviteUrl, count) => apiCall('POST', '/api/ts/nitro/post', { email, guildId, inviteUrl, count }),
   tsLibrary: (email) => apiCall('GET', `/api/ts/library?email=${encodeURIComponent(email)}`),
   tsResetBot: (appId, email, name, icon) =>
     apiCall('POST', `/api/ts/applications/${encodeURIComponent(appId)}/reset-bot-token`, {
