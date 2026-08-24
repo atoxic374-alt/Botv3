@@ -82,6 +82,7 @@ export class TrueStudioManager {
     this.bulkTokensText = '';         // raw textarea content for bulk token import
     this.serverInviteUrl = '';
     this.serverJoinResult = null;
+    this.serverCaptchaVerification = null;
   }
 
   async init() {
@@ -557,6 +558,10 @@ export class TrueStudioManager {
               <button class="ts-btn mint ts-server-join-btn" id="ts-server-join" ${this.selectedEmail ? '' : 'disabled'}>${t('ts.join_server_button')}</button>
             </div>
             <div class="ts-server-captcha-note"><span class="ts-server-captcha-icon">${icon('shield', 'ts-inline-icon')}</span>${escapeHtml(t('ts.join_server_captcha_hint'))}</div>
+            <div class="ts-server-captcha-check">
+              <div><strong>${escapeHtml(t('ts.join_server_captcha_title'))}</strong><span>${this._renderServerCaptchaCheck()}</span></div>
+              <button class="ts-btn ts-btn-xs" id="ts-server-captcha-check">${escapeHtml(t('ts.join_server_captcha_verify'))}</button>
+            </div>
             <div id="ts-server-join-result" class="ts-server-join-result">${this._renderServerJoinResult()}</div>
           </div>
         </section>
@@ -655,6 +660,13 @@ export class TrueStudioManager {
       </div>
     `;
     this._bind();
+  }
+
+  _renderServerCaptchaCheck() {
+    const result = this.serverCaptchaVerification;
+    if (!result) return `<span class="ts-server-result-idle">${escapeHtml(this.captchaSettings?.hasApiKey ? t('ts.join_server_captcha_saved') : t('ts.join_server_captcha_missing'))}</span>`;
+    const detail = result.balance != null ? ` · $${Number(result.balance).toFixed(2)}` : '';
+    return `<span class="ts-server-result-${result.ok ? 'ok' : 'warn'}">${escapeHtml(result.message || '')}${escapeHtml(detail)}</span>`;
   }
 
   _renderServerJoinResult() {
@@ -1630,9 +1642,6 @@ export class TrueStudioManager {
   _renderCaptchaSettings() {
     const c = this.captchaSettings || {};
     const hasKey = !!c.hasApiKey;
-    // When an API key exists, manual mode is locked OFF — auto-solver is active.
-    const fbLocked = hasKey;
-    const fbOn = !fbLocked && (c.manualFallback !== false);
     const vr = this._captchaVerifyResult; // verify result state
     const verifyPopup = vr ? `
       <div class="ts-verify-popup ${vr.ok ? 'ok' : 'fail'}">
@@ -1660,7 +1669,7 @@ export class TrueStudioManager {
           <div class="ts-card-title">${escapeHtml(t('ts.captcha_settings_title') || 'CAPTCHA SOLVER')}</div>
           <div class="ts-captcha-status ${hasKey ? 'on' : 'off'}">${hasKey
             ? (escapeHtml((c.providerLabel || '2Captcha') + ' key set — auto-solve on'))
-            : (escapeHtml(t('ts.captcha_status_manual') || 'No key — manual fallback'))}</div>
+            : (escapeHtml(t('ts.captcha_status_key_required') || '2Captcha key required — automatic only'))}</div>
         </div>
         <div class="ts-field">
           <div class="ts-field-label">${escapeHtml(t('ts.captcha_provider') || 'Provider')}</div>
@@ -1690,13 +1699,7 @@ export class TrueStudioManager {
           </div>
           ${verifyPopup}
         </div>
-        <div class="ts-toggle-row ${fbLocked ? 'ts-toggle-locked' : ''}">
-          <div class="ts-toggle-label">
-            ${escapeHtml(t('ts.captcha_manual_fallback'))}
-            ${fbLocked ? `<span class="ts-toggle-lock-hint">${escapeHtml(t('ts.captcha_fallback_locked'))}</span>` : ''}
-          </div>
-          <div class="ts-toggle ${fbOn ? 'on' : ''} ${fbLocked ? 'disabled' : ''}" id="ts-captcha-fallback" role="switch" aria-checked="${fbOn}" ${fbLocked ? 'aria-disabled="true"' : ''}></div>
-        </div>
+        <div class="ts-captcha-auto-only">${icon('shield', 'ts-inline-icon')} ${escapeHtml(t('ts.captcha_auto_only'))}</div>
         </div>
       </details>
     `;
@@ -4176,6 +4179,7 @@ export class TrueStudioManager {
       this.serverJoinResult = null;
     });
     $('#ts-server-join')?.addEventListener('click', () => this.joinServer());
+    $('#ts-server-captcha-check')?.addEventListener('click', () => this.verifyServerCaptchaKey());
 
     $('#ts-email')?.addEventListener('input', (e) => this.form.email = e.target.value.trim());
     $('#ts-password')?.addEventListener('input', (e) => this.form.password = e.target.value);
@@ -4464,6 +4468,25 @@ export class TrueStudioManager {
       await this.testAccount();
     } catch (e) {
       showNotification(e.message || 'Connection failed', 'error');
+    }
+  }
+
+  async verifyServerCaptchaKey() {
+    const btn = this.contentArea.querySelector('#ts-server-captcha-check');
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      if ((this.captchaSettings?.provider || '2captcha') !== '2captcha') {
+        throw new Error(t('ts.join_server_captcha_provider'));
+      }
+      const r = await window.electronAPI.tsCaptchaVerify();
+      if (!r?.ok) throw new Error(r?.error || t('ts.join_server_captcha_invalid'));
+      this.serverCaptchaVerification = { ok: true, balance: r.balance, message: t('ts.join_server_captcha_valid') };
+      showNotification(this.serverCaptchaVerification.message, 'success');
+    } catch (e) {
+      this.serverCaptchaVerification = { ok: false, message: e.message || t('ts.join_server_captcha_invalid') };
+      showNotification(this.serverCaptchaVerification.message, 'error');
+    } finally {
+      this.render();
     }
   }
 
@@ -4848,6 +4871,7 @@ export class TrueStudioManager {
     try {
       const r = await window.electronAPI.tsSaveCaptchaSettings(payload);
       if (r?.settings) this.captchaSettings = r.settings;
+      this.serverCaptchaVerification = null;
       showNotification(t('ts.captcha_saved') || 'Captcha settings saved', 'success');
       this.render();
     } catch (e) {
@@ -4861,6 +4885,7 @@ export class TrueStudioManager {
     try {
       const r = await window.electronAPI.tsSaveCaptchaSettings({ clearKey: true });
       if (r?.settings) this.captchaSettings = r.settings;
+      this.serverCaptchaVerification = null;
       showNotification(t('ts.captcha_cleared') || 'API key removed', 'success');
       this.render();
     } catch (e) {

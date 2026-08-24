@@ -4734,3 +4734,17 @@ body.light-theme .ts-server-result-warn { color: #805300; }
   .ts-server-join-row { grid-template-columns: 1fr; gap: 8px; }
   .ts-server-join-btn { width: 100%; }
 }
+
+
+/* ── Automatic 2Captcha status ────────────────────────────────────────────── */
+.ts-server-captcha-check { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 9px 10px; border: 1px solid rgba(124,224,196,.14); border-radius: 9px; background: rgba(124,224,196,.04); }
+.ts-server-captcha-check strong { display: block; color: var(--ts-text); font-size: 10px; }
+.ts-server-captcha-check strong + span { display: block; margin-top: 3px; }
+.ts-captcha-auto-only { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 10px; border: 1px solid rgba(124,224,196,.14); border-radius: 9px; color: var(--ts-mint); background: rgba(124,224,196,.045); font-size: 10px; line-height: 1.5; }
+body.light-theme .ts-server-captcha-check { border-color: rgba(11,128,104,.16); background: rgba(11,128,104,.05); }
+body.light-theme .ts-server-captcha-check strong { color: #16322d; }
+body.light-theme .ts-captcha-auto-only { border-color: rgba(11,128,104,.18); color: #075d4e; background: rgba(11,128,104,.06); }
+@media (max-width: 520px) {
+  .ts-server-captcha-check { align-items: stretch; flex-direction: column; }
+  .ts-server-captcha-check .ts-btn { width: 100%; }
+}

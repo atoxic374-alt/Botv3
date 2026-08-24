@@ -653,9 +653,8 @@ const ts = require('./lib/trueStudio');
   }
 
   // ── Captcha settings (per-user, encrypted) ─────────────────────
-  // Holds the user's hCaptcha solver service key (e.g. 2Captcha) plus the
-  // manual-fallback toggle. When the API key is missing we always fall back
-  // to manual solving so the project never stalls.
+  // Holds the user's automatic hCaptcha solver service key (e.g. 2Captcha).
+  // Manual captcha solving is intentionally disabled for all operations.
   function tsCaptchaSettings() {
     const d = ensureData();
     if (!d.tsCaptcha || typeof d.tsCaptcha !== 'object') d.tsCaptcha = {};
@@ -668,7 +667,7 @@ const ts = require('./lib/trueStudio');
     return {
       provider,
       hasApiKey: !!c.apiKey,
-      manualFallback: c.manualFallback !== false,
+      manualFallback: false,
       providerLabel: LABELS[provider] || '2Captcha',
     };
   }
@@ -812,6 +811,14 @@ const ts = require('./lib/trueStudio');
   //
   // Docs: https://2captcha.com/2captcha-api#solving_hcaptcha
   //       https://2captcha.com/api-docs/error-codes
+  const FRIENDLY_2CAPTCHA_ERRORS = {
+    ERROR_ZERO_BALANCE:       'رصيد 2Captcha صفر — يرجى شحن الحساب على 2captcha.com',
+    ERROR_WRONG_USER_KEY:     'مفتاح 2Captcha غير صالح (تحقق من أنه 32 حرفاً بالضبط)',
+    ERROR_KEY_DOES_NOT_EXIST: 'مفتاح 2Captcha غير موجود — تحقق من لوحة التحكم',
+    ERROR_IP_NOT_ALLOWED:     'عنوان IP هذا غير مسموح به في إعدادات 2Captcha',
+    IP_BANNED:                'تم حظر IP من 2Captcha مؤقتاً — انتظر بضع دقائق',
+  };
+
   async function solveWith2Captcha({ apiKey, sitekey, pageUrl, rqdata }) {
     const axios = require('axios');
 
@@ -840,13 +847,7 @@ const ts = require('./lib/trueStudio');
     ]);
 
     // Human-readable Arabic messages for common fatal errors.
-    const FRIENDLY = {
-      ERROR_ZERO_BALANCE:       'رصيد 2Captcha صفر — يرجى شحن الحساب على 2captcha.com',
-      ERROR_WRONG_USER_KEY:     'مفتاح 2Captcha غير صالح (تحقق من أنه 32 حرفاً بالضبط)',
-      ERROR_KEY_DOES_NOT_EXIST: 'مفتاح 2Captcha غير موجود — تحقق من لوحة التحكم',
-      ERROR_IP_NOT_ALLOWED:     'عنوان IP هذا غير مسموح به في إعدادات 2Captcha',
-      IP_BANNED:                'تم حظر IP من 2Captcha مؤقتاً — انتظر بضع دقائق',
-    };
+    const FRIENDLY = FRIENDLY_2CAPTCHA_ERRORS;
 
     // ── Step 1: Submit the task (retry on ERROR_NO_SLOT_AVAILABLE) ────────
     async function submitTask() {
@@ -888,7 +889,9 @@ const ts = require('./lib/trueStudio');
           throw new Error(FRIENDLY[code] || ('2captcha رفض الإرسال: ' + code));
         }
 
-        return String(body.request); // taskId
+        const taskId = String(body.request);
+        tsLog('info', `2Captcha: تم إرسال المهمة بنجاح (ID: ${taskId})`, { operation: 'captcha_solve', confirmed: false, stage: 'task_submitted' });
+        return taskId;
       }
     }
 
@@ -899,6 +902,7 @@ const ts = require('./lib/trueStudio');
       const startedAt        = Date.now();
 
       // Initial wait: 5 s for hCaptcha (2captcha docs; 20 s is only for reCAPTCHA).
+      tsLog('info', '2Captcha: بانتظار نتيجة الحل (قد تستغرق حتى 160 ثانية)…', { operation: 'captcha_solve', confirmed: false, stage: 'polling' });
       await new Promise(r => setTimeout(r, 5_000));
 
       while (Date.now() - startedAt < TIMEOUT_MS) {
@@ -912,7 +916,10 @@ const ts = require('./lib/trueStudio');
         const req  = body.request || '';
 
         // Solved successfully.
-        if (Number(body.status) === 1 && req) return String(req);
+        if (Number(body.status) === 1 && req) {
+          tsLog('info', '2Captcha: تم استلام حل الكابتشا، جارٍ إرساله إلى Discord للتحقق', { operation: 'captcha_solve', confirmed: false, stage: 'solver_response' });
+          return String(req);
+        }
 
         // Still solving — keep polling.
         if (req === 'CAPCHA_NOT_READY') {
@@ -1070,16 +1077,50 @@ const ts = require('./lib/trueStudio');
     });
   }
 
-  // The unified solver passed into every Discord call. Tries the configured
-  // provider first (2Captcha or CapSolver), then falls back to manual unless
-  // the user explicitly disabled the manual fallback in settings.
-  function buildSolveCaptcha() {
+  // Verify the 2Captcha key and balance before a server-join operation.
+  // This is intentionally separate from the generic provider setting: joining
+  // a server is automatic-only and must use 2Captcha, never the manual modal.
+  async function verify2CaptchaKeyForJoin() {
+    const settings = tsCaptchaSettings();
+    const apiKey = tsCaptchaApiKey();
+    if (settings.provider && settings.provider !== '2captcha') {
+      throw new Error('اضبط مزود الكابتشا على 2Captcha قبل إدخال السيرفر');
+    }
+    if (!apiKey) throw new Error('احفظ مفتاح 2Captcha أولاً قبل إدخال السيرفر');
+    tsLog('info', '2Captcha: جارٍ التحقق من المفتاح والرصيد قبل إدخال السيرفر…', { operation: 'captcha_key_verify', confirmed: false, stage: 'start' });
+    const r = await axios.get('https://2captcha.com/res.php', {
+      params: { key: apiKey, action: 'getbalance', json: 1 },
+      timeout: 12_000,
+      validateStatus: () => true,
+    });
+    const body = r.data || {};
+    const balance = Number(body.request);
+    if (Number(body.status) === 1 && Number.isFinite(balance)) {
+      tsLog('info', `2Captcha: المفتاح صالح والرصيد ${balance.toFixed(2)} USD`, { operation: 'captcha_key_verify', confirmed: true, stage: 'verified' });
+      return { ok: true, balance };
+    }
+    const code = body.request || `HTTP ${r.status}`;
+    tsLog('error', '2Captcha: فشل التحقق من المفتاح — ' + (FRIENDLY_2CAPTCHA_ERRORS[code] || code), { operation: 'captcha_key_verify', confirmed: false, stage: 'failed' });
+    throw new Error(FRIENDLY_2CAPTCHA_ERRORS[code] || ('2Captcha رفض المفتاح: ' + code));
+  }
+
+  // The unified solver passed into every Discord call. It uses the configured
+  // automatic provider and never opens a manual captcha modal. The server-join
+  // path passes require2Captcha=true to require 2Captcha specifically.
+  function buildSolveCaptcha({ require2Captcha = false } = {}) {
     return async function solveCaptcha({ sitekey, service, rqdata, rqtoken, url, context }) {
       const settings = tsCaptchaSettings();
       const apiKey   = tsCaptchaApiKey();
       const provider = settings.provider || '2captcha';
 
-      if (apiKey && provider === 'capsolver') {
+      if (require2Captcha && provider !== '2captcha') {
+        throw new Error('اضبط مزود الكابتشا على 2Captcha قبل إدخال السيرفر');
+      }
+      if (require2Captcha && !apiKey) {
+        throw new Error('لا يوجد مفتاح 2Captcha محفوظ — تم إيقاف الإدخال التلقائي');
+      }
+
+      if (apiKey && provider === 'capsolver' && !require2Captcha) {
         try {
           tsLog('info', 'محاولة حل الكابتشا تلقائياً عبر CapSolver…');
           const token = await solveWithCapSolver({ apiKey, sitekey, pageUrl: url, rqdata, rqtoken });
@@ -1103,14 +1144,13 @@ const ts = require('./lib/trueStudio');
         } catch (e) { tsLog('warn', '2Captcha فشل: ' + (e.message || e)); }
       }
 
-      if (apiKey || settings.manualFallback === false) {
-        throw new Error(
-          apiKey
-            ? 'الحل التلقائي فشل ولا يوجد رجوع يدوي عند وجود API key — تحقق من رصيدك أو صحة المفتاح'
-            : 'No automatic solver succeeded and manual fallback is disabled'
-        );
-      }
-      return await solveCaptchaManual({ sitekey, service, rqdata, rqtoken, url, context });
+      throw new Error(
+        require2Captcha
+          ? 'حل 2Captcha التلقائي فشل — راجع الرصيد والـ Live Log'
+          : apiKey
+            ? 'الحل التلقائي فشل — راجع الرصيد والـ Live Log'
+            : 'لا يوجد مفتاح حل تلقائي محفوظ — احفظ مفتاح 2Captcha أولاً'
+      );
     };
   }
 
@@ -1181,7 +1221,11 @@ const ts = require('./lib/trueStudio');
     const apiKey = tsCaptchaApiKey();
     const settings = tsCaptchaSettings();
     const provider = settings.provider || '2captcha';
-    if (!apiKey) return fail(res, new Error('لا يوجد API key محفوظ'));
+    if (!apiKey) {
+      tsLog('warn', '2Captcha: تعذر فحص المفتاح — لا يوجد مفتاح محفوظ', { operation: 'captcha_key_verify', confirmed: false, stage: 'missing_key' });
+      return fail(res, new Error('لا يوجد API key محفوظ'));
+    }
+    tsLog('info', `2Captcha: بدء فحص المفتاح والرصيد (${provider})…`, { operation: 'captcha_key_verify', confirmed: false, stage: 'start' });
     try {
       if (provider === 'capsolver') {
         const r = await axios.post('https://api.capsolver.com/getBalance',
@@ -1204,15 +1248,18 @@ const ts = require('./lib/trueStudio');
           { timeout: 12000 });
         const text = String(r.data || '').trim();
         if (!isNaN(parseFloat(text))) {
-          return ok(res, { ok: true, balance: parseFloat(text), currency: 'USD', provider: '2Captcha' });
+          const balance = parseFloat(text);
+          tsLog('info', `2Captcha: المفتاح صالح والرصيد ${balance.toFixed(2)} USD`, { operation: 'captcha_key_verify', confirmed: true, stage: 'verified' });
+          return ok(res, { ok: true, balance, currency: 'USD', provider: '2Captcha' });
         }
+        tsLog('error', '2Captcha: فشل فحص المفتاح — ' + text, { operation: 'captcha_key_verify', confirmed: false, stage: 'failed' });
         return ok(res, { ok: false, error: text, provider: '2Captcha' });
       }
     } catch (e) {
+      tsLog('error', '2Captcha: خطأ أثناء فحص المفتاح — ' + (e.message || String(e)), { operation: 'captcha_key_verify', confirmed: false, stage: 'failed' });
       return fail(res, e);
     }
   });
-
   // Manual captcha resolution — frontend posts the hCaptcha token here after
   // the user solved the widget. We resolve the pending Promise so the request
   // chain inside trueStudio.js can continue.
@@ -1796,11 +1843,13 @@ const ts = require('./lib/trueStudio');
       const email = String(req.body?.email || '').trim().toLowerCase();
       if (!email) return fail(res, new Error('email required'));
       const inviteCode = parseDiscordInvite(req.body?.inviteUrl || req.body?.inviteCode);
+      tsLog('info', `إدخال السيرفر: بدء العملية للحساب ${email} عبر الدعوة ${inviteCode}`, { operation: 'join-server', confirmed: false, stage: 'start', account: email });
+      await verify2CaptchaKeyForJoin();
       let result = null;
       await enqueueTsAccount(email, async () => {
         const { token, client } = await tsGetToken(email);
         const rateLimiter = makeTsRateLimiter('join-server', null, { minimumGapMs: 900, account: email });
-        const netOpts = { client, solveCaptcha: buildSolveCaptcha(), rateLimiter, captchaContext: 'join-server' };
+        const netOpts = { client, solveCaptcha: buildSolveCaptcha({ require2Captcha: true }), rateLimiter, captchaContext: 'join-server' };
         const invite = await ts.acceptInvite({ token, inviteCode, netOpts });
         const guildId = String(invite?.guild?.id || invite?.guild_id || '').trim() || null;
         let guild = invite?.guild && typeof invite.guild === 'object' ? {
@@ -1821,9 +1870,13 @@ const ts = require('./lib/trueStudio');
           guild,
           message: verified ? 'تم إدخال الحساب إلى السيرفر والتأكد من العضوية' : 'تم إرسال طلب الدخول، لكن تعذر تأكيد العضوية تلقائياً',
         };
+        tsLog(verified ? 'info' : 'warn', `إدخال السيرفر: ${result.message}`, { operation: 'join-server', confirmed: verified, stage: verified ? 'verified' : 'accepted_unverified', account: email, guild: guild?.id || null });
       }, { label: 'Join Discord server' });
       ok(res, result || { joined: false, verified: false, inviteCode });
-    } catch (e) { fail(res, e); }
+    } catch (e) {
+      tsLog('error', `إدخال السيرفر: فشل العملية — ${e.message || String(e)}`, { operation: 'join-server', confirmed: false, stage: 'failed', account: String(req.body?.email || '').trim().toLowerCase() || null });
+      fail(res, e);
+    }
   });
 
   // Returns guilds where the selected account has MANAGE_GUILD or ADMINISTRATOR.
