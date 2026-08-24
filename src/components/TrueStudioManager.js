@@ -687,6 +687,9 @@ export class TrueStudioManager {
         </section>
       </div>
     `;
+    // The account/Nitro workspace now lives in the standalone Boosts repository.
+    this.contentArea.querySelector('#ts-cat-accounts')?.remove();
+    this.contentArea.querySelector('a[href="#ts-cat-accounts"]')?.remove();
     this._bind();
   }
 
