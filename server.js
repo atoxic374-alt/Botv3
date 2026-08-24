@@ -1767,7 +1767,65 @@ const ts = require('./lib/trueStudio');
     ok(res, { available: !!(last && last.config && last.state !== 'done'), session: publicSession(last) });
   });
 
-  // ── Bot invite helpers ─────────────────────────────────────────────────
+  // ── Server invite helpers ────────────────────────────────────────────────
+  function parseDiscordInvite(input) {
+    const raw = String(input || '').trim();
+    if (!raw) throw new Error('رابط دعوة السيرفر مطلوب');
+    if (/^[A-Za-z0-9_-]{2,100}$/.test(raw)) return raw;
+    let url;
+    try { url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`); } catch {
+      throw new Error('رابط الدعوة غير صالح — استخدم discord.gg/... أو discord.com/invite/...');
+    }
+    const host = url.hostname.toLowerCase();
+    if (!['discord.gg', 'www.discord.gg', 'discord.com', 'www.discord.com', 'discordapp.com', 'www.discordapp.com'].includes(host)) {
+      throw new Error('يسمح فقط بروابط دعوة Discord');
+    }
+    const parts = url.pathname.split('/').filter(Boolean);
+    const code = host.endsWith('discord.gg') ? parts[0] : (parts[0]?.toLowerCase() === 'invite' ? parts[1] : '');
+    if (!/^[A-Za-z0-9_-]{2,100}$/.test(code || '')) {
+      throw new Error('رابط الدعوة غير صالح — استخدم discord.gg/... أو discord.com/invite/...');
+    }
+    return code;
+  }
+
+  // Join an existing Discord server using the selected account. This route
+  // never creates an account or a server. The shared captcha solver is passed
+  // into _req, so manual challenges use the same modal as bot operations.
+  app.post('/api/ts/join-server', async (req, res) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      if (!email) return fail(res, new Error('email required'));
+      const inviteCode = parseDiscordInvite(req.body?.inviteUrl || req.body?.inviteCode);
+      let result = null;
+      await enqueueTsAccount(email, async () => {
+        const { token, client } = await tsGetToken(email);
+        const rateLimiter = makeTsRateLimiter('join-server', null, { minimumGapMs: 900, account: email });
+        const netOpts = { client, solveCaptcha: buildSolveCaptcha(), rateLimiter, captchaContext: 'join-server' };
+        const invite = await ts.acceptInvite({ token, inviteCode, netOpts });
+        const guildId = String(invite?.guild?.id || invite?.guild_id || '').trim() || null;
+        let guild = invite?.guild && typeof invite.guild === 'object' ? {
+          id: String(invite.guild.id || guildId || ''),
+          name: String(invite.guild.name || 'Discord server'),
+        } : (guildId ? { id: guildId, name: 'Discord server' } : null);
+        let verified = false;
+        if (guildId) {
+          const guilds = await ts.getUserGuildsWithPerms({ token, netOpts });
+          const member = guilds.find(g => String(g.id) === guildId);
+          if (member) guild = { id: member.id, name: member.name || guild.name };
+          verified = !!member;
+        }
+        result = {
+          joined: true,
+          verified,
+          inviteCode,
+          guild,
+          message: verified ? 'تم إدخال الحساب إلى السيرفر والتأكد من العضوية' : 'تم إرسال طلب الدخول، لكن تعذر تأكيد العضوية تلقائياً',
+        };
+      }, { label: 'Join Discord server' });
+      ok(res, result || { joined: false, verified: false, inviteCode });
+    } catch (e) { fail(res, e); }
+  });
+
   // Returns guilds where the selected account has MANAGE_GUILD or ADMINISTRATOR.
   app.get('/api/ts/bot-invite-guilds', async (req, res) => {
     try {

@@ -80,6 +80,8 @@ export class TrueStudioManager {
     this._resumeInfo = null;
     this.pfp = { avatar: null, banner: null, updatedAt: 0 };
     this.bulkTokensText = '';         // raw textarea content for bulk token import
+    this.serverInviteUrl = '';
+    this.serverJoinResult = null;
   }
 
   async init() {
@@ -541,6 +543,22 @@ export class TrueStudioManager {
               </div>
             </div>
           </div>
+          <div class="ts-card ts-server-join-card">
+            <div class="ts-card-head">
+              <div class="ts-card-title ar">${t('ts.join_server_title')}</div>
+              <span class="ts-card-step">03 / SERVER</span>
+            </div>
+            <div class="ts-server-join-intro">${escapeHtml(t('ts.join_server_hint'))}</div>
+            <div class="ts-server-join-row">
+              <div class="ts-field">
+                <div class="ts-field-label">${t('ts.server_invite_label')}</div>
+                <input type="url" id="ts-server-invite" class="ts-input ltr" value="${escapeAttr(this.serverInviteUrl)}" placeholder="https://discord.gg/..." autocomplete="off" />
+              </div>
+              <button class="ts-btn mint ts-server-join-btn" id="ts-server-join" ${this.selectedEmail ? '' : 'disabled'}>${t('ts.join_server_button')}</button>
+            </div>
+            <div class="ts-server-captcha-note"><span class="ts-server-captcha-icon">${icon('shield', 'ts-inline-icon')}</span>${escapeHtml(t('ts.join_server_captcha_hint'))}</div>
+            <div id="ts-server-join-result" class="ts-server-join-result">${this._renderServerJoinResult()}</div>
+          </div>
         </section>
 
         <section class="ts-category" id="ts-cat-setup">
@@ -637,6 +655,13 @@ export class TrueStudioManager {
       </div>
     `;
     this._bind();
+  }
+
+  _renderServerJoinResult() {
+    const result = this.serverJoinResult;
+    if (!result) return `<span class="ts-server-result-idle">${escapeHtml(t('ts.join_server_idle'))}</span>`;
+    const detail = result.guild?.name ? ` · ${result.guild.name}` : '';
+    return `<span class="ts-server-result-${result.ok ? 'ok' : 'warn'}">${escapeHtml(result.message || '')}${escapeHtml(detail)}</span>`;
   }
 
   _renderProfilesCard() {
@@ -4137,6 +4162,7 @@ export class TrueStudioManager {
         this._libraryAffectedTeamIds = new Set();
         this._selectedLibraryApps.clear();
       }
+      this.serverJoinResult = null;
       this.render();
     });
     $('#ts-lib-refresh')?.addEventListener('click', () => this.loadLibrary());
@@ -4145,6 +4171,11 @@ export class TrueStudioManager {
     $('#ts-acct-save')?.addEventListener('click', () => this.connectAccount());
     $('#ts-acct-delete')?.addEventListener('click', () => this.deleteAccount());
     $('#ts-acct-test')?.addEventListener('click', () => this.testAccount());
+    $('#ts-server-invite')?.addEventListener('input', (e) => {
+      this.serverInviteUrl = e.target.value;
+      this.serverJoinResult = null;
+    });
+    $('#ts-server-join')?.addEventListener('click', () => this.joinServer());
 
     $('#ts-email')?.addEventListener('input', (e) => this.form.email = e.target.value.trim());
     $('#ts-password')?.addEventListener('input', (e) => this.form.password = e.target.value);
@@ -4433,6 +4464,37 @@ export class TrueStudioManager {
       await this.testAccount();
     } catch (e) {
       showNotification(e.message || 'Connection failed', 'error');
+    }
+  }
+
+  async joinServer() {
+    if (!this.selectedEmail) {
+      showNotification(t('ts.pick_account_first'), 'error');
+      return;
+    }
+    const inviteUrl = (this.serverInviteUrl || '').trim();
+    if (!inviteUrl) {
+      showNotification(t('ts.server_invite_required'), 'error');
+      this.contentArea.querySelector('#ts-server-invite')?.focus();
+      return;
+    }
+    const btn = this.contentArea.querySelector('#ts-server-join');
+    const resultEl = this.contentArea.querySelector('#ts-server-join-result');
+    if (btn) { btn.disabled = true; btn.textContent = t('ts.join_server_connecting'); }
+    if (resultEl) resultEl.innerHTML = `<span class="ts-server-result-idle">${escapeHtml(t('ts.join_server_connecting'))}</span>`;
+    try {
+      const r = await window.electronAPI.tsJoinServer(this.selectedEmail, inviteUrl);
+      this.serverJoinResult = {
+        ok: r?.verified === true,
+        message: r?.message || (r?.verified ? t('ts.join_server_success') : t('ts.join_server_unverified')),
+        guild: r?.guild || null,
+      };
+      showNotification(this.serverJoinResult.message, this.serverJoinResult.ok ? 'success' : 'warn');
+    } catch (e) {
+      this.serverJoinResult = { ok: false, message: e.message || t('ts.join_server_failed'), guild: null };
+      showNotification(this.serverJoinResult.message, 'error');
+    } finally {
+      this.render();
     }
   }
 

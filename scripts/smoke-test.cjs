@@ -27,6 +27,19 @@ async function json(path, options) {
   assert.equal(missingLibrary.res.status, 200, 'library validation should return JSON');
   assert.equal(missingLibrary.body?.success, false, 'library without account should fail safely');
 
+  const missingJoinEmail = await json('/api/ts/join-server', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ inviteUrl: 'https://discord.gg/example' }),
+  });
+  assert.equal(missingJoinEmail.body?.success, false, 'joining without an account should fail safely');
+
+  const invalidJoinHost = await json('/api/ts/join-server', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'smoke@invalid.test', inviteUrl: 'https://example.com/invite/example' }),
+  });
+  assert.equal(invalidJoinHost.body?.success, false, 'non-Discord invite hosts should be rejected');
+  assert.match(invalidJoinHost.body?.error || '', /Discord/i, 'invalid invite host error should be explicit');
+
   const unknownLibrary = await json('/api/ts/library?email=smoke%40invalid.test');
   assert.equal(unknownLibrary.body?.success, false, 'library with unknown account should fail safely');
 

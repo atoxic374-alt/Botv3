@@ -4713,3 +4713,24 @@ body.light-theme .ts-account-connect-banner span:not(.ts-account-connect-dot) { 
 @media (max-width: 760px) {
   .ts-category-grid-accounts { grid-template-columns: 1fr; }
 }
+
+
+/* ── Server invite connection card ───────────────────────────────────────── */
+.ts-server-join-card { margin-top: 14px; }
+.ts-server-join-intro { margin: -2px 0 12px; color: var(--ts-muted); font-size: 10.5px; line-height: 1.6; }
+.ts-server-join-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 12px; }
+.ts-server-join-btn { min-width: 136px; min-height: 40px; }
+.ts-server-captcha-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 11px; padding: 8px 10px; border: 1px solid rgba(126,184,245,.16); border-radius: 9px; background: rgba(126,184,245,.055); color: var(--ts-muted); font-size: 10px; line-height: 1.6; }
+.ts-server-captcha-icon { flex: 0 0 auto; color: #8dbcf0; }
+.ts-server-join-result { min-height: 18px; margin-top: 9px; font-size: 10px; line-height: 1.5; }
+.ts-server-result-idle { color: var(--ts-muted); }
+.ts-server-result-ok { color: var(--ts-mint); }
+.ts-server-result-warn { color: #f3c565; }
+body.light-theme .ts-server-captcha-note { border-color: rgba(55,112,160,.18); background: rgba(55,112,160,.06); color: #55716b; }
+body.light-theme .ts-server-captcha-icon { color: #397bad; }
+body.light-theme .ts-server-result-ok { color: #075d4e; }
+body.light-theme .ts-server-result-warn { color: #805300; }
+@media (max-width: 520px) {
+  .ts-server-join-row { grid-template-columns: 1fr; gap: 8px; }
+  .ts-server-join-btn { width: 100%; }
+}
