@@ -30,7 +30,8 @@ export class TrueStudioManager {
       prefix: 'True-Studio',
       teamName: 'Botv3 Team',
       teamCount: 1,
-      waitMinutes: 15,
+      // No arbitrary inter-batch waiting; only Discord-confirmed cooldowns wait.
+      waitMinutes: 0,
       proxyUrl: '',
       speed: 'medium',
       selectedTeamId: '',
@@ -79,6 +80,8 @@ export class TrueStudioManager {
     this._libraryAffectedTeamIds = new Set();
     this._resumeInfo = null;
     this.pfp = { avatar: null, banner: null, updatedAt: 0 };
+    this._draftSaveTimer = null;
+    this._draftEventsBound = false;
     this.bulkTokensText = '';         // raw textarea content for bulk token import
     this.serverInviteUrl = '';
     this.serverJoinResult = null;
@@ -98,6 +101,7 @@ export class TrueStudioManager {
       await this.refresh();
       await this._loadCaptchaSettings();
       await this._loadBrightDataSettings();
+      await this._loadDraft();
       await this._loadBotTokens();
       await this._loadPfp();
       await this._loadAutoIntents();
@@ -902,6 +906,47 @@ export class TrueStudioManager {
   async _loadProfiles() {
     try { this.profiles = (await window.electronAPI.tsProfiles())?.profiles || []; }
     catch (_) { this.profiles = []; }
+  }
+
+  async _loadDraft() {
+    try {
+      const draft = (await window.electronAPI.tsDraft())?.draft;
+      if (!draft?.config) return;
+      const c = draft.config;
+      if (draft.email) {
+        this.form.email = draft.email;
+        if (this.accounts.some(a => a.email === draft.email)) this.selectedEmail = draft.email;
+      }
+      if (c.rules) this.form.rules = { ...this.form.rules, ...c.rules };
+      for (const key of ['count', 'prefix', 'teamName', 'teamCount', 'waitMinutes', 'proxyUrl', 'speed', 'selectedTeamId', 'batchSize', 'sessionBudget']) {
+        if (c[key] !== undefined) this.form[key] = c[key];
+      }
+      if (c.brightData) {
+        this.form.brightData = { ...this.form.brightData, ...c.brightData,
+          zonePassword: this.form.brightData?.zonePassword || '' };
+      }
+    } catch (_) { /* draft persistence is non-fatal */ }
+  }
+
+  _draftConfig() {
+    const bd = this.form.brightData || {};
+    return {
+      rules: { ...this.form.rules }, count: this.form.count, prefix: this.form.prefix,
+      teamName: this.form.teamName, teamCount: this.form.teamCount,
+      waitMinutes: this.form.waitMinutes, proxyUrl: this.form.proxyUrl, speed: this.form.speed,
+      selectedTeamId: this.form.selectedTeamId, brightData: {
+        enabled: bd.enabled === true, customerId: bd.customerId || '',
+        zoneName: bd.zoneName || '', protocol: bd.protocol || 'http',
+      }, batchSize: this.form.batchSize, sessionBudget: this.form.sessionBudget,
+    };
+  }
+
+  _scheduleDraftSave() {
+    clearTimeout(this._draftSaveTimer);
+    this._draftSaveTimer = setTimeout(async () => {
+      try { await window.electronAPI.tsSaveDraft(this.selectedEmail || this.form.email || '', this._draftConfig()); }
+      catch (_) { /* persistence is non-fatal while editing */ }
+    }, 350);
   }
 
   async _loadResumeInfo() {
@@ -4226,6 +4271,11 @@ export class TrueStudioManager {
   _bind() {
     const $ = (sel) => this.contentArea.querySelector(sel);
     this._bindLogToolbar();
+    if (!this._draftEventsBound) {
+      this._draftEventsBound = true;
+      this.contentArea.addEventListener('input', () => this._scheduleDraftSave());
+      this.contentArea.addEventListener('change', () => this._scheduleDraftSave());
+    }
 
     $('#ts-acct-select')?.addEventListener('change', (e) => {
       this.selectedEmail = e.target.value || null;
@@ -4290,8 +4340,10 @@ export class TrueStudioManager {
           // Team name/count fields are conditional; render them immediately
           // instead of leaving the user with an enabled switch and no inputs.
           this.render();
+          this._scheduleDraftSave();
           return;
         }
+        this._scheduleDraftSave();
         el.classList.toggle('on');
         el.setAttribute('aria-checked', String(this.form.rules[key]));
         this._updateRuleFieldStates();
@@ -4344,6 +4396,7 @@ export class TrueStudioManager {
       this.form.brightData.enabled = !this.form.brightData.enabled;
       this._proxyTestResult = null;
       this.render();
+      this._scheduleDraftSave();
     });
 
     // ── Bright Data credential inputs ───────────────────────────────
@@ -4407,6 +4460,7 @@ export class TrueStudioManager {
         this._bdPreset      = preset.id;
         this._quickSetupOpen = false;
         this.render();
+        this._scheduleDraftSave();
         showNotification(`تم تطبيق إعدادات ${preset.name} — أدخل Zone Name وPassword`, 'success');
       });
     });

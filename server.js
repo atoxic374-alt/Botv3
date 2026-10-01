@@ -111,6 +111,7 @@ function ensureData() {
   if (!d.tsCaptcha || typeof d.tsCaptcha !== 'object') { d.tsCaptcha = {}; changed = true; }
   if (typeof d.tsBulkTokenCounter !== 'number') { d.tsBulkTokenCounter = 0; changed = true; }
   if (!Array.isArray(d.tsProfiles)) { d.tsProfiles = []; changed = true; }
+  if (!d.tsDraft || typeof d.tsDraft !== 'object') { d.tsDraft = null; changed = true; }
   if (typeof d.tsLastSession === 'undefined') { d.tsLastSession = null; changed = true; }
   if (changed) dataStore.touch();
   return d;
@@ -1410,6 +1411,32 @@ const ts = require('./lib/trueStudio');
     ok(res, { snapshot: tsSnapshot(), accounts: tsAccountsPublic() });
   });
 
+  // Keep the last editor values across browser refreshes without storing
+  // passwords, TOTP secrets, or Discord user tokens in the draft.
+  app.get('/api/ts/draft', (req, res) => {
+    try { ok(res, { draft: publicDraft(ensureData().tsDraft) }); }
+    catch (e) { fail(res, e); }
+  });
+
+  app.post('/api/ts/draft', async (req, res) => {
+    try {
+      const d = ensureData();
+      const config = profileConfig(req.body?.config || {});
+      if (config.proxyUrl) {
+        config.proxyUrl = encrypt(config.proxyUrl);
+        config.proxyUrlEncrypted = true;
+      }
+      d.tsDraft = {
+        email: String(req.body?.email || '').trim().toLowerCase().slice(0, 254),
+        config,
+        updatedAt: Date.now(),
+      };
+      writeData(d);
+      await dataStore.flush();
+      ok(res, { draft: publicDraft(d.tsDraft) });
+    } catch (e) { fail(res, e); }
+  });
+
 
   app.get('/api/ts/pfp', (req, res) => {
     try {
@@ -1418,7 +1445,7 @@ const ts = require('./lib/trueStudio');
     } catch (e) { fail(res, e); }
   });
 
-  app.post('/api/ts/pfp', (req, res) => {
+  app.post('/api/ts/pfp', async (req, res) => {
     try {
       const avatar = validateProfileImage('avatar', req.body?.avatar || null);
       const banner = validateProfileImage('banner', req.body?.banner || null);
@@ -1427,6 +1454,7 @@ const ts = require('./lib/trueStudio');
       p.banner = banner;
       p.updatedAt = Date.now();
       writeData(ensureData());
+      await dataStore.flush();
       ok(res, { pfp: { avatar: p.avatar, banner: p.banner, updatedAt: p.updatedAt } });
     } catch (e) { fail(res, e); }
   });
@@ -1756,6 +1784,16 @@ const ts = require('./lib/trueStudio');
       delete session.config.proxyUrlEncrypted;
     }
     return session;
+  }
+
+  function publicDraft(draft) {
+    if (!draft || typeof draft !== 'object') return null;
+    const config = { ...(draft.config || {}) };
+    if (config.proxyUrlEncrypted) {
+      config.proxyUrl = tryDecrypt(config.proxyUrl) || '';
+      delete config.proxyUrlEncrypted;
+    }
+    return { email: String(draft.email || ''), config, updatedAt: draft.updatedAt || 0 };
   }
 
   app.get('/api/ts/profiles', (req, res) => {
@@ -4223,9 +4261,13 @@ const ts = require('./lib/trueStudio');
                     bot: { name: slot.name, appId: tApp.id, hasToken: true, durationMs: tDurMs, isRetry: true },
                   });
                 } catch (_te) {
-                  // Session restart failed → escalate: switch to a different account
-                  tsLog('error', `فشل بعد إعادة الجلسة لـ ${slot.name}: ` + (_te?.message || _te));
-                  await _switchAndRetry('timeout-switch');
+                  // A timeout is not proof that the account is invalid. Stop
+                  // instead of rotating to another account on an ambiguous
+                  // network/portal failure.
+                  tsLog('error', `فشل بعد إعادة الجلسة لـ ${slot.name}: ` + (_te?.message || _te), {
+                    operation: 'create_bot', stage: 'session_restart', confirmed: false,
+                  });
+                  s.cancelRequested = true;
                 }
 
               // ── 2) Critical (token revoked OR hard block 60003) ──────────────
@@ -4275,10 +4317,11 @@ const ts = require('./lib/trueStudio');
                     tsLog('error', `حظر Cloudflare ولا يوجد حساب بديل — تخطّي ${slot.name}`);
                     _retryAllowed = false;
                   } else {
-                    tsLog('warn', `لا يوجد حساب بديل — إيقاف الجلسة 60 ثانية ثم المحاولة…`);
-                    s.state = 'waiting'; s.waitUntilTs = Date.now() + 60_000; s.waitTotalMs = 60_000;
+                    const sameAccountWait = Math.max(retryAfterMs(err), 10_000);
+                    tsLog('warn', `لا يوجد حساب بديل — انتظار المدة التي أرسلها Discord (${Math.ceil(sameAccountWait / 1000)}s) ثم إعادة المحاولة…`);
+                    s.state = 'waiting'; s.waitUntilTs = Date.now() + sameAccountWait; s.waitTotalMs = sameAccountWait;
                     pushTsEvent('ts_progress');
-                    await tsSleep(60_000);
+                    await tsSleep(sameAccountWait);
                     s.state = 'running'; s.waitUntilTs = 0; s.waitTotalMs = 0;
                     pushTsEvent('ts_progress');
                     try {
@@ -4337,28 +4380,24 @@ const ts = require('./lib/trueStudio');
                   }
                 }
 
-              // ── 4) Any other unexpected error → try switching account once ───
+              // ── 4) Any other unexpected error → stop; it is not proof that
+              // the current account is invalid and must never rotate accounts.
               } else {
-                tsLog('warn', `خطأ غير متوقع على ${slot.name} — محاولة التبديل للحساب البديل…`);
-                await _switchAndRetry('generic-error');
+                tsLog('error', `خطأ غير مؤكد على ${slot.name} — إيقاف الجلسة بدون تبديل الحساب: ${msg}`, {
+                  operation: 'create_bot', stage: 'unexpected_error', confirmed: false,
+                });
+                s.cancelRequested = true;
               }
 
               pushTsEvent('ts_progress');
             }
           }
 
-          // ── Session-budget: proactive account rotation ─────────────────────
-          // If sessionBudget > 0 and current account has created ≥ N bots,
-          // rotate NOW before Discord escalates security checks.
+          // ── Session-budget is informational only. Account rotation is never
+          // proactive: it is allowed only after a confirmed Discord error.
           if (sessionBudget > 0 && botsThisAccount >= sessionBudget && i < count && !s.cancelRequested) {
-            tsLog('info', `حد الجلسة (${sessionBudget} بوت) اكتمل على ${currentEmail} تبديل استباقي للحساب…`);
-            const budgetSwitched = await switchToNextAccount(); // resets botsThisAccount on success
-            if (budgetSwitched) {
-              tsLog('info', `تم تبديل الحساب استباقياً إلى ${currentEmail} — يبدأ العداد من صفر`, { operation: 'account_switch', confirmed: true });
-            } else {
-              tsLog('warn', `لا يوجد حساب بديل — مكمل على ${currentEmail} (budget ignored)`);
-              botsThisAccount = 0; // reset anyway so we don't spam the log every bot
-            }
+            tsLog('info', `حد الجلسة (${sessionBudget}) وصل — الاستمرار على ${currentEmail} بدون تبديل استباقي`);
+            botsThisAccount = 0;
           }
 
           writeData(d);
@@ -4381,10 +4420,9 @@ const ts = require('./lib/trueStudio');
           // Sequential mode: standard per-bot cooldown
           if (i < count && !s.cancelRequested) {
             const ms = useParallelMode
-              ? Math.max(Math.round(1000 * speedFactor), waitMinutes * 60 * 1000)
-              : Math.max(Math.round(2500 * speedFactor), waitMinutes * 60 * 1000);
-            if (ms >= 60000) tsLog('info', 'انتظار ' + waitMinutes + ' دقيقة قبل الدُّفعة التالية…');
-            else if (useParallelMode && ms > 300) tsLog('info', 'كولداون: ' + (ms / 1000).toFixed(1) + 's قبل الدُّفعة التالية…');
+              ? Math.max(Math.round(1000 * speedFactor), 0)
+              : Math.max(Math.round(2500 * speedFactor), 0);
+            if (useParallelMode && ms > 300) tsLog('info', 'كولداون تقني قصير: ' + (ms / 1000).toFixed(1) + 's قبل الدُّفعة التالية…');
             await tsSleep(ms);
           }
         }
