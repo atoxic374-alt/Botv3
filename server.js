@@ -4142,6 +4142,12 @@ const ts = require('./lib/trueStudio');
                 err?.data?.global === true ||
                 String(err?.rateLimit?.scope || '').toLowerCase() === 'global'
               );
+              // A solver/provider failure is not evidence that Discord marked
+              // the account. Never turn CAPTCHA_FAILED/CAPTCHA_REQUIRED into
+              // a fake CAPTCHA wall or rotate credentials because of it.
+              const _isCaptchaSolverFailure = err?.code === 'CAPTCHA_FAILED' ||
+                                               err?.code === 'CAPTCHA_REQUIRED' ||
+                                               !!err?.captchaSitekey;
               const _isTimeout   = err?.code === 'OP_TIMEOUT';
 
               // ── Shared helper: switch account → FRESH SESSION → retry ──────────
@@ -4286,6 +4292,14 @@ const ts = require('./lib/trueStudio');
                 await _switchAndRetry(_isHardBlock ? 'hard-block' : 'token-revoked');
 
               // ── 3) Rate limit / Cloudflare ───────────────────────────────────
+              } else if (_isCaptchaSolverFailure) {
+                tsLog('error', `فشل محلل الكابتشا أثناء ${slot.name} — هذا ليس حظراً مؤكداً على ${currentEmail}؛ إيقاف الجلسة بدون وسم الحساب أو تبديله`, {
+                  operation: 'captcha_solve', stage: 'solver_failure', confirmed: false,
+                  code: err?.code || 'CAPTCHA_FAILED', account: currentEmail,
+                });
+                s.lastError = 'Captcha solver failed — لم يتم تأكيد حظر الحساب، راجع إعدادات مزود الكابتشا ثم أعد المحاولة.';
+                s.cancelRequested = true;
+
               } else if (_isRateLimit) {
                 if (_isGlobalRateLimit) {
                   const globalWait = Math.max(retryAfterMs(err), 10_000);
