@@ -4113,6 +4113,13 @@ const ts = require('./lib/trueStudio');
                 tsLog('warn', `لم يُحتسب ${slot.name} كنجاح — العملية توقفت عند ${err.tsStage || 'مرحلة غير معروفة'}${err.tsAppId ? ` (App ID: ${err.tsAppId})` : ''}`, {
                   operation: 'create_bot', stage: err.tsStage || null, appId: err.tsAppId || null, confirmed: false, partial: true,
                 });
+                const partialMfaRequired = err?.code === 'MFA_REQUIRED' || err?.data?.code === 60003 ||
+                  /two[ ._-]?factor|multi[ ._-]?factor|mfa|2fa/i.test(msg);
+                if (partialMfaRequired) {
+                  s.lastError = 'Discord يتطلب MFA لهذه العملية — لم يتم تأكيد أن الحساب محظور، وتم إيقاف الجلسة بدون تبديل الحساب.';
+                  tsLog('error', s.lastError, { operation: 'mfa_required', stage: err.tsStage || null, confirmed: false, account: currentEmail });
+                  s.cancelRequested = true;
+                }
                 pushTsEvent('ts_bot_partial', {
                   bot: err.tsAppId ? { name: slot.name, appId: err.tsAppId, hasToken: !!err.tsBotToken, incomplete: true } : null,
                   error: msg,
@@ -4130,12 +4137,13 @@ const ts = require('./lib/trueStudio');
               // ── Classify the error ───────────────────────────────────────────
               // Hard block (60003): Discord blocks the specific operation without
               // a solvable MFA ticket — different from a real token-revoke 401.
-              const _isHardBlock = err?.code === 60003 || err?.data?.code === 60003 ||
-                                   /two.factor.is.required/i.test(msg);
+              const _isMfaRequired = err?.code === 'MFA_REQUIRED' || err?.data?.code === 60003 ||
+                                     /two[ ._-]?factor|multi[ ._-]?factor|mfa|2fa/i.test(msg);
+              const _isHardBlock = false;
               // Real 401: Discord revoked the session token entirely.
               const _isTokenRevoked = !_isHardBlock &&
                                       (err?.status === 401 || /Unauthorized/i.test(msg));
-              const _isCritical  = _isHardBlock || _isTokenRevoked;
+              const _isCritical  = _isTokenRevoked;
               const _isRateLimit = isRateLimitedError(err);
               const _isGlobalRateLimit = _isRateLimit && (
                 err?.rateLimit?.global === true ||
@@ -4279,6 +4287,14 @@ const ts = require('./lib/trueStudio');
               // ── 2) Critical (token revoked OR hard block 60003) ──────────────
               // In BOTH cases we pause the current account and switch immediately.
               // We never stop the loop — we always try the next account.
+              } else if (_isMfaRequired) {
+                s.lastError = 'Discord يتطلب MFA لهذه العملية — تحقق من كلمة المرور أو إعداد 2FA ثم أعد المحاولة. لم يتم تبديل الحساب.';
+                tsLog('error', s.lastError, {
+                  operation: 'mfa_required', stage: err?.tsStage || null,
+                  confirmed: false, account: currentEmail,
+                });
+                s.cancelRequested = true;
+
               } else if (_isCritical) {
                 if (_isHardBlock) {
                   tsLog('warn', `حظر MFA (60003/Two-Factor) على ${slot.name} [${currentEmail}] — تبديل فوري للحساب…`);
